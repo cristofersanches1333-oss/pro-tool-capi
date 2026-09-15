@@ -1,0 +1,56 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ProTrader Analysis V7</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial;color:#292b31}.app{max-width:480px;margin:auto;min-height:100vh;background:#fff}
+header{padding:20px;font-size:21px;font-weight:800;border-bottom:1px solid #eee}header span{color:#7657e8}.hero{text-align:center;padding:24px 15px 12px}.hero h1{margin:0;font-size:25px}.hero p{color:#888}
+.card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:12px;color:#888;display:block;margin-bottom:6px}select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}
+button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10px;text-align:center;border-radius:8px;background:#f4f1ff;color:#654db5;font-size:13px}.ok{color:#168653;background:#eaf8f1}.bad{color:#b63b4b;background:#fff0f2}
+.result{text-align:center;display:none}.tag{display:inline-block;padding:7px 12px;background:#eee9ff;color:#6948dc;border-radius:20px;font-size:12px;font-weight:bold}.trade{font-size:42px;font-weight:900;margin:10px}
+.meter{height:9px;background:#eee;border-radius:10px;overflow:hidden}.meter i{display:block;height:100%;background:#7657e8}.small{font-size:11px;color:#888}.digits{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:12px}.d{text-align:center;font-size:10px}.bar{height:55px;background:#f0eff5;border-radius:4px;position:relative;overflow:hidden}.bar i{position:absolute;bottom:0;left:0;right:0;background:#8d72ed}.diag{background:#f7f7f9;padding:10px;border-radius:8px;margin-top:10px;font-size:12px;line-height:1.45}
+</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis</h1><p>Persistent live connection · direct tick feed</p></div>
+<div class=card><div class=grid><div><label>Market</label><select id=market>
+<option value="1HZ100V" selected>Volatility 100 (1s)</option>
+<option value="1HZ10V">Volatility 10 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option>
+<option value="R_10">Volatility 10</option><option value="R_25">Volatility 25</option><option value="R_50">Volatility 50</option><option value="R_75">Volatility 75</option><option value="R_100">Volatility 100</option>
+</select></div><div><label>Strategy</label><select id=strategy><option>EVEN / ODD</option><option>OVER / UNDER</option><option>MATCHES / DIFFERS</option></select></div></div>
+<div id=status class=status style="margin-top:12px">Starting…</div><button id=analyze>ANALYZE MARKET</button></div>
+<div id=result class="card result"><span class=tag>TRADE SIGNAL</span><div id=trade class=trade>WAIT</div><div id=mname></div><p class=small>Condition score <b id=score>0</b>/100</p><div class=meter><i id=meter></i></div><p id=detail class=small></p></div>
+<div class=card><b>Live digit distribution</b><div class=small>Last digit: <b id=last>–</b> · Samples: <b id=samples>0</b></div><div id=digits class=digits></div><div id=diag class=diag>Connecting directly to tick stream.</div></div></div>
+<script>
+const $=x=>document.getElementById(x), URL="wss://ws.binaryws.com/websockets/v3";
+let ws=null,ticks=[],pip=2,retry=0,timer=null,pinger=null,subId=null,closing=false;
+function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
+function status(t,c=""){let e=$("status");e.textContent=t;e.className="status "+c}
+function reconnect(){clearTimeout(timer);let ms=Math.min(12000,1000*Math.pow(1.6,retry++));status("Disconnected · reconnecting…","bad");timer=setTimeout(connect,ms)}
+function connect(){
+ clearTimeout(timer);clearInterval(pinger);closing=false;status("Connecting to live ticks…");
+ try{ws=new WebSocket(URL)}catch(e){reconnect();return}
+ ws.onopen=()=>{retry=0;status("● CONNECTED · subscribing…","ok");subscribe($("market").value);pinger=setInterval(()=>send({ping:1}),25000)};
+ ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}
+   if(m.error){status("API: "+m.error.message,"bad");$("diag").textContent="Symbol rejected: "+$("market").value+". Choose another market.";return}
+   if(m.msg_type==="tick"&&m.tick){
+     if(m.subscription&&m.subscription.id)subId=m.subscription.id;
+     if(m.tick.pip_size!=null)pip=m.tick.pip_size;
+     let s=Number(m.tick.quote).toFixed(pip),d=Number(s.slice(-1));
+     if(Number.isFinite(d)){ticks.push(d);if(ticks.length>500)ticks.shift();$("last").textContent=d;$("samples").textContent=ticks.length;status("● LIVE TICKS · auto-reconnect ON","ok");$("diag").textContent="Direct tick stream active.";render()}
+   }
+ };
+ ws.onerror=()=>status("Connection interrupted","bad");
+ ws.onclose=()=>{clearInterval(pinger);if(!closing)reconnect()};
+}
+function subscribe(sym){ticks=[];subId=null;render();send({ticks:sym,subscribe:1,req_id:2})}
+function changeMarket(){
+ let sym=$("market").value;ticks=[];render();
+ if(ws&&ws.readyState===1){if(subId)send({forget:subId});setTimeout(()=>subscribe(sym),150)}else connect()
+}
+function render(){let a=ticks.slice(-100),c=Array(10).fill(0);a.forEach(x=>c[x]++);$("digits").innerHTML=c.map((n,i)=>`<div class=d><div class=bar><i style="height:${a.length?100*n/a.length:0}%"></i></div>${i}<br>${n}</div>`).join("")}
+function even(a){return 100*a.filter(x=>x%2===0).length/a.length}
+function calc(){if(ticks.length<50)return {t:"WAIT",s:0,d:`Collecting ${ticks.length}/50 ticks.`};let a10=ticks.slice(-10),a25=ticks.slice(-25),a50=ticks.slice(-50),st=$("strategy").value;
+if(st==="EVEN / ODD"){let p=[even(a10),even(a25),even(a50)],av=p.reduce((a,b)=>a+b)/3,side=av>=50?"EVEN":"ODD",al=p.filter(x=>(x>=50)===(side==="EVEN")).length,edge=Math.abs(av-50),sc=Math.min(92,Math.round(45+edge*2+al*7));return {t:al===3&&edge>=5&&sc>=70?side:"WAIT",s:sc,d:`EVEN 10/25/50: ${p.map(x=>x.toFixed(0)+"%").join(" · ")}`}}
+if(st==="OVER / UNDER"){let p=100*a50.filter(x=>x>=5).length/50,e=Math.abs(p-50),sc=Math.min(92,Math.round(50+e*2));return {t:e>=8?(p>50?"OVER 4":"UNDER 5"):"WAIT",s:sc,d:`Digits 5–9: ${p.toFixed(0)}%`}}
+let c=Array(10).fill(0);a50.forEach(x=>c[x]++);let mx=Math.max(...c),d=c.indexOf(mx),p=100*mx/50,sc=Math.min(92,Math.round(45+p*2));return {t:p>=16?"DIFFERS "+d:"WAIT",s:sc,d:`Most frequent: ${d} (${p.toFixed(0)}%)`}}
+$("market").onchange=changeMarket;$("analyze").onclick=()=>{let r=calc();$("result").style.display="block";$("trade").textContent=r.t;$("score").textContent=r.s;$("meter").style.width=r.s+"%";$("detail").textContent=r.d;$("mname").textContent=$("market").selectedOptions[0].textContent};
+window.addEventListener("online",()=>{if(!ws||ws.readyState!==1)connect()});window.addEventListener("offline",()=>status("No internet","bad"));
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&(!ws||ws.readyState!==1))connect()});
+render();connect();
+</script></body></html>
