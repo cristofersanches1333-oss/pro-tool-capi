@@ -7,7 +7,7 @@ label{font-size:12px;color:#888;display:block;margin-bottom:6px}select,button{wi
 button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10px;text-align:center;border-radius:8px;background:#f4f1ff;color:#654db5;font-size:13px}.ok{color:#168653;background:#eaf8f1}.bad{color:#b63b4b;background:#fff0f2}
 .result{text-align:center;display:none}.tag{display:inline-block;padding:7px 12px;background:#eee9ff;color:#6948dc;border-radius:20px;font-size:12px;font-weight:bold}.trade{font-size:42px;font-weight:900;margin:10px}
 .meter{height:9px;background:#eee;border-radius:10px;overflow:hidden}.meter i{display:block;height:100%;background:#7657e8}.small{font-size:11px;color:#888}.digits{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:12px}.d{text-align:center;font-size:10px}.bar{height:55px;background:#f0eff5;border-radius:4px;position:relative;overflow:hidden}.bar i{position:absolute;bottom:0;left:0;right:0;background:#8d72ed}.diag{background:#f7f7f9;padding:10px;border-radius:8px;margin-top:10px;font-size:12px;line-height:1.45}
-</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis · V10 Test Lab</h1><p>Persistent live connection · Deriv public tick feed</p></div>
+</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis · V11 Validation</h1><p>Persistent live connection · Deriv public tick feed</p></div>
 <div class=card><div class=grid><div><label>Market</label><select id=market>
 <option value="1HZ100V" selected>Volatility 100 (1s)</option>
 <option value="1HZ10V">Volatility 10 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option>
@@ -18,12 +18,28 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
 <div class=card><b>Live digit distribution</b><div class=small>Last digit: <b id=last>–</b> · Samples: <b id=samples>0</b></div><div id=digits class=digits></div><div id=diag class=diag>Connecting directly to tick stream.</div></div></div>
 <script>
 
-// --- V10 TEST LAB: deduplicated single-tick forward validation ---
+// --- V11 VALIDATION: same V10 rules + persistent statistics ---
 (() => {
   const history = [];
   const log = [];
   let lastIdentity = null, skipped = 0, pending = null;
   let signals = 0, wins = 0, losses = 0, cooldown = 0;
+  let evenW=0, evenL=0, oddW=0, oddL=0, bestStreak=0, currentStreak=0;
+  const STORE="protrader_v11_stats";
+  try {
+    const s=JSON.parse(localStorage.getItem(STORE)||"null");
+    if(s){
+      signals=s.signals||0; wins=s.wins||0; losses=s.losses||0;
+      evenW=s.evenW||0; evenL=s.evenL||0; oddW=s.oddW||0; oddL=s.oddL||0;
+      bestStreak=s.bestStreak||0; currentStreak=s.currentStreak||0;
+      if(Array.isArray(s.log)) log.push(...s.log);
+    }
+  } catch(_) {}
+  function saveStats(){
+    try{localStorage.setItem(STORE,JSON.stringify({
+      signals,wins,losses,evenW,evenL,oddW,oddL,bestStreak,currentStreak,log:log.slice(-2000)
+    }))}catch(_){}
+  }
 
   const $ = id => document.getElementById(id);
   const slice = n => history.slice(-Math.min(n, history.length));
@@ -36,6 +52,18 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
     if ($("v9Wins")) $("v9Wins").textContent = wins;
     if ($("v9Losses")) $("v9Losses").textContent = losses;
     if ($("v9Rate")) $("v9Rate").textContent = signals ? (100*wins/signals).toFixed(1)+"%" : "—";
+    if ($("v11Even")) $("v11Even").textContent=evenW+"/"+evenL;
+    if ($("v11Odd")) $("v11Odd").textContent=oddW+"/"+oddL;
+    if ($("v11Best")) $("v11Best").textContent=bestStreak;
+    if ($("v11Current")) $("v11Current").textContent=currentStreak;
+    if ($("v11Blocks")) {
+      let blocks=[];
+      for(let i=0;i<Math.floor(log.length/100);i++){
+        let b=log.slice(i*100,(i+1)*100), w=b.filter(x=>x.result==="WIN").length;
+        blocks.push(`Block ${i+1}: ${w}W / ${100-w}L · ${w}%`);
+      }
+      $("v11Blocks").textContent=blocks.length?blocks.join(" | "):"No completed block yet.";
+    }
     if ($("v9State")) $("v9State").textContent = state;
     if ($("v9Why")) $("v9Why").textContent = why;
     if ($("v10Log")) {
@@ -48,8 +76,16 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
   function scorePending(d) {
     if (!pending) return;
     const ok = pending.side === "EVEN" ? d % 2 === 0 : d % 2 === 1;
-    signals++; ok ? wins++ : losses++;
+    signals++;
+    if(ok){
+      wins++; currentStreak++; bestStreak=Math.max(bestStreak,currentStreak);
+      if(pending.side==="EVEN") evenW++; else oddW++;
+    } else {
+      losses++; currentStreak=0;
+      if(pending.side==="EVEN") evenL++; else oddL++;
+    }
     log.push({tick: pending.tick, side: pending.side, digit:d, result:ok?"WIN":"LOSS"});
+    saveStats();
     pending = null;
     cooldown = 5;
   }
@@ -125,6 +161,25 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
     };
     return add.call(this,type,wrapped,options);
   };
+
+  setTimeout(()=>{
+    const ex=$("v11Export"), rs=$("v11Reset");
+    if(ex) ex.onclick=()=>{
+      const rows=[["tick","signal","next_digit","result"],...log.map(x=>[x.tick,x.side,x.digit,x.result])];
+      const csv=rows.map(r=>r.join(",")).join("\n");
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+      const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+      a.download="protrader_v11_results.csv"; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    };
+    if(rs) rs.onclick=()=>{
+      if(confirm("Clear saved V11 results and start a new validation?")){
+        localStorage.removeItem(STORE); location.reload();
+      }
+    };
+    render(signals?"RESUMED · saved results":"WAIT · 0/100 unique ticks",
+      signals?"Saved results restored. Building a fresh 100-tick baseline before new signals.":"Building a clean 100-tick baseline.");
+  },0);
 
   render("WAIT · 0/100 unique ticks","Building a clean 100-tick baseline.");
 })();
@@ -231,8 +286,8 @@ render();connect();
 
 
 <section id="v9Validation" style="max-width:900px;margin:18px auto;padding:22px;background:#fff;border:1px solid #e5e7eb;border-radius:22px;box-sizing:border-box;font-family:Arial,sans-serif">
-  <div style="font-size:22px;font-weight:800;margin-bottom:5px">V10 Signal Test Lab</div>
-  <div style="color:#777;margin-bottom:16px">Clean forward test · one unique tick = one observation · paper validation</div>
+  <div style="font-size:22px;font-weight:800;margin-bottom:5px">V11 Validation Lab</div>
+  <div style="color:#777;margin-bottom:16px">Persistent forward test · same V10 signal rules · paper validation</div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
     <div><b id="v10Ticks">0</b><br><small>Unique ticks</small></div>
     <div><b id="v9Total">0</b><br><small>Signals</small></div>
@@ -243,11 +298,23 @@ render();connect();
     <div><b id="v9Losses">0</b><br><small>Losses</small></div>
     <div><b id="v10Skipped">0</b><br><small>Duplicates skipped</small></div>
   </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center;margin-top:16px">
+    <div><b id="v11Even">0/0</b><br><small>EVEN W/L</small></div>
+    <div><b id="v11Odd">0/0</b><br><small>ODD W/L</small></div>
+    <div><b id="v11Best">0</b><br><small>Best streak</small></div>
+    <div><b id="v11Current">0</b><br><small>Current streak</small></div>
+  </div>
   <div id="v9State" style="margin-top:16px;padding:12px;border-radius:12px;background:#f5f3ff;color:#5b3fd6;font-weight:700">
     WAIT · 0/100 unique ticks
   </div>
   <div id="v9Why" style="margin-top:10px;color:#666;font-size:13px;line-height:1.45">
     Building a clean 100-tick baseline.
+  </div>
+  <div style="margin-top:18px;font-weight:800">100-signal blocks</div>
+  <div id="v11Blocks" style="margin-top:8px;color:#666;font-size:13px">No completed block yet.</div>
+  <div style="display:flex;gap:10px;margin-top:14px">
+    <button id="v11Export" type="button">EXPORT CSV</button>
+    <button id="v11Reset" type="button">NEW TEST</button>
   </div>
   <div style="margin-top:18px;font-weight:800">Recent paper signals</div>
   <div style="overflow-x:auto;margin-top:8px">
