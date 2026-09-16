@@ -7,7 +7,7 @@ label{font-size:12px;color:#888;display:block;margin-bottom:6px}select,button{wi
 button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10px;text-align:center;border-radius:8px;background:#f4f1ff;color:#654db5;font-size:13px}.ok{color:#168653;background:#eaf8f1}.bad{color:#b63b4b;background:#fff0f2}
 .result{text-align:center;display:none}.tag{display:inline-block;padding:7px 12px;background:#eee9ff;color:#6948dc;border-radius:20px;font-size:12px;font-weight:bold}.trade{font-size:42px;font-weight:900;margin:10px}
 .meter{height:9px;background:#eee;border-radius:10px;overflow:hidden}.meter i{display:block;height:100%;background:#7657e8}.small{font-size:11px;color:#888}.digits{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:12px}.d{text-align:center;font-size:10px}.bar{height:55px;background:#f0eff5;border-radius:4px;position:relative;overflow:hidden}.bar i{position:absolute;bottom:0;left:0;right:0;background:#8d72ed}.diag{background:#f7f7f9;padding:10px;border-radius:8px;margin-top:10px;font-size:12px;line-height:1.45}
-</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis</h1><p>Persistent live connection · direct tick feed</p></div>
+</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis</h1><p>Persistent live connection · Deriv public tick feed</p></div>
 <div class=card><div class=grid><div><label>Market</label><select id=market>
 <option value="1HZ100V" selected>Volatility 100 (1s)</option>
 <option value="1HZ10V">Volatility 10 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option>
@@ -17,7 +17,64 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
 <div id=result class="card result"><span class=tag>TRADE SIGNAL</span><div id=trade class=trade>WAIT</div><div id=mname></div><p class=small>Condition score <b id=score>0</b>/100</p><div class=meter><i id=meter></i></div><p id=detail class=small></p></div>
 <div class=card><b>Live digit distribution</b><div class=small>Last digit: <b id=last>–</b> · Samples: <b id=samples>0</b></div><div id=digits class=digits></div><div id=diag class=diag>Connecting directly to tick stream.</div></div></div>
 <script>
-const $=x=>document.getElementById(x), URL="wss://ws.binaryws.com/websockets/v3";
+
+// --- V8 connection diagnostics ---
+(() => {
+  const endpoint = "wss://api.derivws.com/trading/v1/options/ws/public";
+  const ep = () => document.getElementById("wsEndpoint");
+  const st = () => document.getElementById("wsState");
+  const dt = () => document.getElementById("wsDetail");
+
+  function setDiag(state, detail) {
+    if (ep()) ep().textContent = "Endpoint: " + endpoint;
+    if (st()) st().textContent = "State: " + state;
+    if (dt()) dt().textContent = "Detail: " + (detail || "—");
+  }
+
+  window.addEventListener("online", () => setDiag("ONLINE", "Internet connection available; WebSocket will reconnect automatically."));
+  window.addEventListener("offline", () => setDiag("OFFLINE", "Device reports no Internet connection."));
+
+  // Capture browser-level errors so the phone screen tells us what happened.
+  window.addEventListener("error", (e) => {
+    if (e && e.message) setDiag("JAVASCRIPT ERROR", e.message);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    setDiag("PROMISE ERROR", String(e.reason || "Unhandled promise rejection"));
+  });
+
+  // Wrap WebSocket only for diagnostics; application logic remains unchanged.
+  const NativeWebSocket = window.WebSocket;
+  window.WebSocket = function(url, protocols) {
+    setDiag("CONNECTING", String(url));
+    const sock = protocols === undefined ? new NativeWebSocket(url) : new NativeWebSocket(url, protocols);
+
+    sock.addEventListener("open", () => setDiag("CONNECTED", "WebSocket handshake completed."));
+    sock.addEventListener("error", () => setDiag("SOCKET ERROR", "Browser reported a WebSocket error. Waiting for close code/reason…"));
+    sock.addEventListener("close", (e) => {
+      setDiag("CLOSED", "code=" + e.code + " reason=" + (e.reason || "(none)") + " clean=" + e.wasClean);
+    });
+    sock.addEventListener("message", (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.error) {
+          const code = d.error.code || "API_ERROR";
+          const msg = d.error.message || JSON.stringify(d.error);
+          setDiag(code, msg);
+        } else if (d.msg_type === "tick") {
+          setDiag("LIVE TICKS", "Receiving real-time market ticks.");
+        }
+      } catch (_) {}
+    });
+    return sock;
+  };
+  window.WebSocket.prototype = NativeWebSocket.prototype;
+  Object.setPrototypeOf(window.WebSocket, NativeWebSocket);
+
+  setDiag("READY", "Public market-data connection; no account login required.");
+})();
+
+
+const $=x=>document.getElementById(x), URL="wss://api.derivws.com/trading/v1/options/ws/public";
 let ws=null,ticks=[],pip=2,retry=0,timer=null,pinger=null,subId=null,closing=false;
 function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function status(t,c=""){let e=$("status");e.textContent=t;e.className="status "+c}
@@ -53,4 +110,16 @@ $("market").onchange=changeMarket;$("analyze").onclick=()=>{let r=calc();$("resu
 window.addEventListener("online",()=>{if(!ws||ws.readyState!==1)connect()});window.addEventListener("offline",()=>status("No internet","bad"));
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&(!ws||ws.readyState!==1))connect()});
 render();connect();
-</script></body></html>
+</script>
+<div id="wsDiagnostic" style="max-width:900px;margin:18px auto 40px;padding:16px 18px;
+background:#111827;color:#e5e7eb;border-radius:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+font-size:12px;line-height:1.55;box-sizing:border-box;">
+  <div style="font-family:Arial,sans-serif;font-size:14px;font-weight:700;margin-bottom:8px;color:white;">
+    Connection diagnostics
+  </div>
+  <div id="wsEndpoint">Endpoint: waiting…</div>
+  <div id="wsState">State: starting…</div>
+  <div id="wsDetail">Detail: —</div>
+</div>
+
+</body></html>
