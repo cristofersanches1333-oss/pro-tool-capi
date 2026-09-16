@@ -7,7 +7,7 @@ label{font-size:12px;color:#888;display:block;margin-bottom:6px}select,button{wi
 button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10px;text-align:center;border-radius:8px;background:#f4f1ff;color:#654db5;font-size:13px}.ok{color:#168653;background:#eaf8f1}.bad{color:#b63b4b;background:#fff0f2}
 .result{text-align:center;display:none}.tag{display:inline-block;padding:7px 12px;background:#eee9ff;color:#6948dc;border-radius:20px;font-size:12px;font-weight:bold}.trade{font-size:42px;font-weight:900;margin:10px}
 .meter{height:9px;background:#eee;border-radius:10px;overflow:hidden}.meter i{display:block;height:100%;background:#7657e8}.small{font-size:11px;color:#888}.digits{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:12px}.d{text-align:center;font-size:10px}.bar{height:55px;background:#f0eff5;border-radius:4px;position:relative;overflow:hidden}.bar i{position:absolute;bottom:0;left:0;right:0;background:#8d72ed}.diag{background:#f7f7f9;padding:10px;border-radius:8px;margin-top:10px;font-size:12px;line-height:1.45}
-</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis</h1><p>Persistent live connection · Deriv public tick feed</p></div>
+</style></head><body><div class=app><header>ProTrader <span>Analysis Tool</span></header><div class=hero><h1>Smart Market Analysis · V9 Pro</h1><p>Persistent live connection · Deriv public tick feed</p></div>
 <div class=card><div class=grid><div><label>Market</label><select id=market>
 <option value="1HZ100V" selected>Volatility 100 (1s)</option>
 <option value="1HZ10V">Volatility 10 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option>
@@ -17,6 +17,102 @@ button{border:0;background:#7657e8;color:#fff;margin-top:12px}.status{padding:10
 <div id=result class="card result"><span class=tag>TRADE SIGNAL</span><div id=trade class=trade>WAIT</div><div id=mname></div><p class=small>Condition score <b id=score>0</b>/100</p><div class=meter><i id=meter></i></div><p id=detail class=small></p></div>
 <div class=card><b>Live digit distribution</b><div class=small>Last digit: <b id=last>–</b> · Samples: <b id=samples>0</b></div><div id=digits class=digits></div><div id=diag class=diag>Connecting directly to tick stream.</div></div></div>
 <script>
+
+// --- V9 PRO: conservative signal filter + forward-test tracker ---
+(() => {
+  const digits = [];
+  let pending = null;
+  let total=0, wins=0, losses=0, cooldown=0;
+
+  const $ = id => document.getElementById(id);
+  const pct = (arr, fn) => arr.length ? 100*arr.filter(fn).length/arr.length : 0;
+  const last = n => digits.slice(-Math.min(n,digits.length));
+
+  function render(state, why) {
+    if ($("v9Total")) $("v9Total").textContent=total;
+    if ($("v9Wins")) $("v9Wins").textContent=wins;
+    if ($("v9Losses")) $("v9Losses").textContent=losses;
+    if ($("v9Rate")) $("v9Rate").textContent=total ? (100*wins/total).toFixed(1)+"%" : "—";
+    if ($("v9State")) $("v9State").textContent=state;
+    if ($("v9Why")) $("v9Why").textContent=why;
+  }
+
+  function evaluateOutcome(d) {
+    if (!pending) return;
+    const ok = pending.side==="EVEN" ? d%2===0 : d%2===1;
+    total++; ok ? wins++ : losses++;
+    render("RESULT · "+(ok?"WIN":"LOSS"),
+      pending.side+" test signal → next digit "+d+". Observed rate is historical forward-test data, not a forecast.");
+    pending=null;
+    cooldown=5;
+  }
+
+  function maybeSignal() {
+    if (digits.length < 100 || pending || cooldown>0) {
+      if (cooldown>0) cooldown--;
+      if (digits.length<100) render("WAIT · "+digits.length+"/100 ticks",
+        "Building the 100-tick baseline before validating signals.");
+      return;
+    }
+    const windows=[10,25,50,100];
+    const even=windows.map(n=>pct(last(n),d=>d%2===0));
+    const odd=even.map(x=>100-x);
+
+    // Require directional agreement in all windows and stronger short/medium confirmation.
+    let side=null, vals=null;
+    if (even.every(x=>x>=52) && even[0]>=60 && even[1]>=56) { side="EVEN"; vals=even; }
+    if (odd.every(x=>x>=52) && odd[0]>=60 && odd[1]>=56) { side="ODD"; vals=odd; }
+
+    if (!side) {
+      render("WATCH · no confirmed setup",
+        "10/25/50/100 EVEN: "+even.map(x=>x.toFixed(0)+"%").join(" · ")+" — waiting for multi-window agreement.");
+      return;
+    }
+
+    // Distribution concentration guard: avoid extreme single-digit clustering.
+    const a=last(100), counts=Array(10).fill(0);
+    a.forEach(d=>counts[d]++);
+    if (Math.max(...counts) >= 18) {
+      render("WAIT · distribution filter",
+        "A single digit is unusually concentrated in the 100-tick window; signal skipped.");
+      return;
+    }
+
+    pending={side, at:digits.length};
+    render("SIGNAL · "+side,
+      side+" agreement 10/25/50/100: "+vals.map(x=>x.toFixed(0)+"%").join(" · ")+
+      ". Forward test will score the next tick only.");
+  }
+
+  const NativeWS = window.WebSocket;
+  const Old = NativeWS.prototype.addEventListener;
+  // Hook all sockets created by the page through the already-installed diagnostic wrapper.
+  const Wrapped = window.WebSocket;
+  window.WebSocket = function(url, protocols) {
+    const s = protocols === undefined ? new Wrapped(url) : new Wrapped(url, protocols);
+    s.addEventListener("message", e => {
+      try {
+        const m=JSON.parse(e.data);
+        if (m.msg_type==="tick" && m.tick && m.tick.quote!==undefined) {
+          const q=String(m.tick.quote);
+          const clean=q.replace(/[^0-9]/g,"");
+          if (!clean) return;
+          const d=Number(clean[clean.length-1]);
+          evaluateOutcome(d);
+          digits.push(d);
+          if (digits.length>1000) digits.shift();
+          maybeSignal();
+        }
+      } catch(_) {}
+    });
+    return s;
+  };
+  window.WebSocket.prototype=Wrapped.prototype;
+  Object.setPrototypeOf(window.WebSocket, Wrapped);
+  render("WAIT · collecting data","Building the 100-tick baseline before validating signals.");
+})();
+
+
 
 // --- V8 connection diagnostics ---
 (() => {
@@ -111,6 +207,24 @@ window.addEventListener("online",()=>{if(!ws||ws.readyState!==1)connect()});wind
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&(!ws||ws.readyState!==1))connect()});
 render();connect();
 </script>
+
+<section id="v9Validation" style="max-width:900px;margin:18px auto;padding:22px;background:#fff;border:1px solid #e5e7eb;border-radius:22px;box-sizing:border-box;font-family:Arial,sans-serif">
+  <div style="font-size:22px;font-weight:800;margin-bottom:5px">Signal validation</div>
+  <div style="color:#777;margin-bottom:16px">Forward-test results · one-tick outcome · no real-money execution</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
+    <div><b id="v9Total">0</b><br><small>Signals</small></div>
+    <div><b id="v9Wins">0</b><br><small>Wins</small></div>
+    <div><b id="v9Losses">0</b><br><small>Losses</small></div>
+    <div><b id="v9Rate">—</b><br><small>Observed rate</small></div>
+  </div>
+  <div id="v9State" style="margin-top:16px;padding:12px;border-radius:12px;background:#f5f3ff;color:#5b3fd6;font-weight:700">
+    WAIT · collecting data
+  </div>
+  <div id="v9Why" style="margin-top:10px;color:#666;font-size:13px;line-height:1.45">
+    Requires agreement across multiple tick windows before a test signal is recorded.
+  </div>
+</section>
+
 <div id="wsDiagnostic" style="max-width:900px;margin:18px auto 40px;padding:16px 18px;
 background:#111827;color:#e5e7eb;border-radius:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
 font-size:12px;line-height:1.55;box-sizing:border-box;">
