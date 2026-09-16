@@ -1,13 +1,85 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MATCH Forward Test V9</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial,sans-serif;color:#292b31}.app{max-width:560px;margin:auto;min-height:100vh;background:#fff;padding-bottom:30px}.hero{text-align:center;padding:24px 16px 8px}.hero h1{margin:0;font-size:24px}.small{font-size:12px;color:#777;line-height:1.45}.card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}button{border:0;background:#7657e8;color:#fff;margin-top:10px}.status,.state{padding:12px;border-radius:10px;text-align:center;margin-top:12px}.status{background:#f4f1ff;color:#654db5}.ok{background:#eaf8f1;color:#168653}.bad{background:#fff0f2;color:#b63b4b}.state{background:#f5f3ff;color:#5b3fd6;font-size:20px;font-weight:900}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-top:15px}.stats b{font-size:19px}.rule{background:#f8f8fb;border-radius:10px;padding:12px;line-height:1.55}.diag{background:#111827;color:#e5e7eb;font:11px ui-monospace,monospace;line-height:1.55}</style></head><body><div class="app">
-<div class="hero"><h1>MATCH · Forward Test V9</h1><p class="small">Prueba aislada · candidato descubierto en V8 · sin combinar filtros</p></div>
-<div class="card"><label class="small">Market</label><select id="market"><option value="1HZ100V" selected>Volatility 100 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ10V">Volatility 10 (1s)</option></select><div id="status" class="status">Starting connection…</div></div>
-<div class="card"><div id="state" class="state">WARMUP · 0/50</div><p id="why" class="small">Primero se llena una ventana independiente de 50 ticks. Después cada aparición del contexto se evalúa hacia adelante.</p><div class="stats"><div><b id="ticks">0</b><br><span class="small">Ticks</span></div><div><b id="signals">0</b><br><span class="small">Signals</span></div><div><b id="wins">0</b><br><span class="small">Wins</span></div><div><b id="rate">—</b><br><span class="small">Observed</span></div></div><div class="stats"><div><b id="losses">0</b><br><span class="small">Losses</span></div><div><b id="gapNow">—</b><br><span class="small">Gap 7</span></div><div><b id="f50Now">—</b><br><span class="small">F50 digit 7</span></div><div><b id="dupes">0</b><br><span class="small">Duplicates</span></div></div><button id="resetBtn">NEW V9 TEST</button><button id="exportBtn">EXPORT CSV</button></div>
-<div class="card"><b>Contexto bajo prueba</b><div class="rule small"><b>MATCH 7</b><br>GAP bucket 4: el 7 lleva entre 16 y 25 ticks sin aparecer.<br>F50 bucket 2: el 7 representa más de 10% y hasta 14% de los últimos 50 ticks.<br><br>La condición se calcula únicamente con ticks anteriores. El tick siguiente recibido resuelve la señal.</div></div>
-<div class="card diag"><b>Connection diagnostics</b><div id="endpoint"></div><div id="wsState">State: starting…</div><div id="wsDetail">Detail: —</div></div></div>
-<script>(function(){"use strict";const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public",WARMUP=50;const el=id=>document.getElementById(id);let ws=null,reconnectTimer=null,pingTimer=null,retry=0,manualClose=false;let history=[],lastIdentity=null,duplicates=0,signals=0,wins=0,losses=0,log=[];
-function setStatus(t,type){const e=el('status');e.textContent=t;e.className='status'+(type==='ok'?' ok':type==='bad'?' bad':'')}function diag(s,d){el('wsState').textContent='State: '+s;el('wsDetail').textContent='Detail: '+(d||'—')}function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}function gapFor(d){for(let i=history.length-1,g=0;i>=0;i--,g++)if(history[i]===d)return g;return 99}function freq(d,n){const a=history.slice(-n);return a.length?a.filter(x=>x===d).length/a.length:0}function condition(){if(history.length<WARMUP)return false;const g=gapFor(7),f=freq(7,50);return g>15&&g<=25&&f>.10&&f<=.14}
-function render(){const g=history.length?gapFor(7):99,f=history.length?freq(7,50):0;el('ticks').textContent=history.length;el('signals').textContent=signals;el('wins').textContent=wins;el('losses').textContent=losses;el('rate').textContent=signals?(100*wins/signals).toFixed(1)+'%':'—';el('gapNow').textContent=g===99?'99+':g;el('f50Now').textContent=(100*f).toFixed(1)+'%';el('dupes').textContent=duplicates;if(history.length<WARMUP){el('state').textContent='WARMUP · '+history.length+'/'+WARMUP}else{el('state').textContent='FORWARD VALIDATION · '+signals+' signals';el('why').textContent='Solo se cuentan apariciones nuevas del contexto 7 / GAP+F50 4|2. No hay discovery ni reajuste durante esta prueba.'}}
-function handleTick(t){const pip=t.pip_size==null?2:t.pip_size,q=Number(t.quote).toFixed(pip),d=Number(q.slice(-1)),id=String(t.epoch??'')+'|'+q;if(id===lastIdentity){duplicates++;render();return}lastIdentity=id;if(!Number.isFinite(d))return;const armed=condition(),g=gapFor(7),f=freq(7,50);if(armed){signals++;const hit=d===7?1:0;if(hit)wins++;else losses++;log.push({tick:history.length+1,epoch:t.epoch??'',quote:q,prediction:7,actual:d,win:hit,gap:g,f50:f})}history.push(d);render()}
-function connect(){manualClose=false;try{if(ws)ws.close()}catch(e){}setStatus('Connecting…');diag('connecting',ENDPOINT);ws=new WebSocket(ENDPOINT);ws.onopen=()=>{retry=0;setStatus('● LIVE TICKS · MATCH V9','ok');diag('open','Connected');send({ticks:el('market').value,subscribe:1});clearInterval(pingTimer);pingTimer=setInterval(()=>send({ping:1}),30000)};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){diag('API error',m.error.message);return}if(m.msg_type==='tick'&&m.tick)handleTick(m.tick)};ws.onerror=()=>diag('socket error','Browser reported WebSocket error');ws.onclose=()=>{setStatus('Disconnected · reconnecting…','bad');diag('closed','Automatic reconnect');clearInterval(pingTimer);if(!manualClose){clearTimeout(reconnectTimer);reconnectTimer=setTimeout(connect,Math.min(10000,1000*Math.pow(2,retry++)))}}}
-function reset(){history=[];lastIdentity=null;duplicates=signals=wins=losses=0;log=[];render()}el('market').onchange=()=>{reset();connect()};el('resetBtn').onclick=reset;el('exportBtn').onclick=()=>{const lines=['tick,epoch,quote,prediction,actual,result,gap7,f50_7'];for(const r of log)lines.push([r.tick,r.epoch,r.quote,r.prediction,r.actual,r.win?'WIN':'LOSS',r.gap,r.f50.toFixed(4)].join(','));const b=new Blob([lines.join('\n')],{type:'text/csv'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='match_v9_forward_results.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};el('endpoint').textContent='Endpoint: '+ENDPOINT;render();connect()})();</script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MATCH Multi-Test V10</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial,sans-serif;color:#292b31}
+.app{max-width:680px;margin:auto;min-height:100vh;background:#fff;padding-bottom:30px}
+.hero{text-align:center;padding:24px 16px 8px}.hero h1{margin:0;font-size:24px}.small{font-size:12px;color:#777;line-height:1.45}
+.card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}
+select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}
+button{border:0;background:#7657e8;color:#fff;margin-top:10px}
+.status,.state{padding:12px;border-radius:10px;text-align:center;margin-top:12px}.status{background:#f4f1ff;color:#654db5}
+.ok{background:#eaf8f1;color:#168653}.bad{background:#fff0f2;color:#b63b4b}.state{background:#f5f3ff;color:#5b3fd6;font-size:20px;font-weight:900}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-top:15px}.stats b{font-size:18px}
+table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:7px 4px;border-bottom:1px solid #eee;text-align:left}
+.good{background:#eefaf3}.done{font-weight:900}.diag{background:#111827;color:#e5e7eb;font:11px ui-monospace,monospace;line-height:1.55}
+</style></head>
+<body><div class="app">
+<div class="hero"><h1>MATCH · Multi-Test V10</h1><p class="small">12 candidatos simultáneos · forward puro · objetivo 100 señales por candidato</p></div>
+<div class="card"><label class="small">Market</label><select id="market">
+<option value="1HZ100V" selected>Volatility 100 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option>
+<option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ10V">Volatility 10 (1s)</option>
+</select><div id="status" class="status">Starting connection…</div></div>
+<div class="card"><div id="state" class="state">WARMUP · 0/100</div>
+<p id="why" class="small">Después del warmup, todos los candidatos se evalúan sobre el mismo flujo de ticks nuevos. No hay discovery ni reajuste.</p>
+<div class="stats"><div><b id="ticks">0</b><br><span class="small">Ticks</span></div><div><b id="active">12</b><br><span class="small">Activos</span></div><div><b id="done">0</b><br><span class="small">100 señales</span></div><div><b id="dupes">0</b><br><span class="small">Duplicados</span></div></div>
+<button id="resetBtn">NEW V10 TEST</button><button id="exportBtn">EXPORT CSV</button></div>
+<div class="card"><b>Forward ranking</b><p class="small">La tasa es descriptiva. Cada candidato se congela al llegar a 100 señales para que todos se comparen con el mismo tamaño de muestra.</p>
+<div style="overflow:auto"><table><thead><tr><th>#</th><th>Pred.</th><th>Contexto</th><th>W/N</th><th>Rate</th><th>Estado</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<div class="card diag"><b>Connection diagnostics</b><div id="endpoint"></div><div id="wsState">State: starting…</div><div id="wsDetail">Detail: —</div></div>
+</div>
+<script>
+(function(){"use strict";
+const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public",WARMUP=100,TARGET=100;
+const C=[
+ {d:9,f:"GAP+F50",v:"1|1"},{d:9,f:"GAP",v:"5"},{d:8,f:"F100",v:"1"},{d:8,f:"GAP+F50",v:"1|1"},
+ {d:7,f:"GAP+F50",v:"4|2"},{d:4,f:"F100",v:"1"},{d:3,f:"F20",v:"1"},{d:3,f:"GAP",v:"1"},
+ {d:3,f:"GAP+F50",v:"1|3"},{d:3,f:"F100",v:"2"},{d:9,f:"F20",v:"3"},{d:9,f:"GAP+F50",v:"5|0"}
+].map((x,i)=>({...x,id:i+1,n:0,w:0,l:0,done:false}));
+const el=id=>document.getElementById(id);let ws=null,reconnectTimer=null,pingTimer=null,retry=0,manualClose=false;
+let history=[],lastIdentity=null,duplicates=0,log=[];
+function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
+function gapFor(d){for(let i=history.length-1,g=0;i>=0;i--,g++)if(history[i]===d)return g;return 99}
+function freq(d,n){const a=history.slice(-n);return a.length?a.filter(x=>x===d).length/a.length:0}
+function bucket(x,cuts){for(let i=0;i<cuts.length;i++)if(x<=cuts[i])return i;return cuts.length}
+function contextValue(c){
+ const g=bucket(gapFor(c.d),[2,5,9,15,25]),f20=bucket(freq(c.d,20),[.05,.10,.15,.20]),
+ f50=bucket(freq(c.d,50),[.06,.10,.14,.18]),f100=bucket(freq(c.d,100),[.07,.09,.11,.13,.16]);
+ if(c.f==="GAP")return String(g); if(c.f==="F20")return String(f20); if(c.f==="F50")return String(f50);
+ if(c.f==="F100")return String(f100); if(c.f==="GAP+F50")return g+"|"+f50; return "";
+}
+function armed(c){return history.length>=WARMUP && contextValue(c)===c.v}
+function render(){
+ el("ticks").textContent=history.length;let dn=C.filter(c=>c.done).length;el("done").textContent=dn;el("active").textContent=C.length-dn;el("dupes").textContent=duplicates;
+ el("state").textContent=history.length<WARMUP?"WARMUP · "+history.length+"/"+WARMUP:(dn===C.length?"V10 COMPLETE · 12/12":"MULTI FORWARD · "+dn+"/12 complete");
+ const sorted=[...C].sort((a,b)=>(b.n?b.w/b.n:0)-(a.n?a.w/a.n:0)||b.n-a.n);
+ el("rows").innerHTML=sorted.map((c,i)=>"<tr class='"+(c.done?"good done":"")+"'><td>"+(i+1)+"</td><td>MATCH "+c.d+"</td><td>"+c.f+" "+c.v+"</td><td>"+c.w+"/"+c.n+"</td><td>"+(c.n?(100*c.w/c.n).toFixed(1)+"%":"—")+"</td><td>"+(c.done?"DONE":"RUN")+"</td></tr>").join("");
+}
+function handleTick(t){
+ const pip=t.pip_size==null?2:t.pip_size,q=Number(t.quote).toFixed(pip),d=Number(q.slice(-1)),id=String(t.epoch??"")+"|"+q;
+ if(id===lastIdentity){duplicates++;render();return} lastIdentity=id;if(!Number.isFinite(d))return;
+ if(history.length>=WARMUP){
+   for(const c of C){if(c.done||!armed(c))continue; const cv=contextValue(c),hit=d===c.d?1:0;c.n++;c.w+=hit;c.l+=1-hit;
+     log.push({tick:history.length+1,epoch:t.epoch??"",quote:q,id:c.id,pred:c.d,family:c.f,value:c.v,observed:cv,actual:d,win:hit});
+     if(c.n>=TARGET)c.done=true;
+   }
+ }
+ history.push(d);render();
+}
+function setStatus(t,type){const e=el("status");e.textContent=t;e.className="status"+(type==="ok"?" ok":type==="bad"?" bad":"")}
+function diag(s,d){el("wsState").textContent="State: "+s;el("wsDetail").textContent="Detail: "+(d||"—")}
+function connect(){manualClose=false;try{if(ws)ws.close()}catch(e){}setStatus("Connecting…");diag("connecting",ENDPOINT);ws=new WebSocket(ENDPOINT);
+ ws.onopen=()=>{retry=0;setStatus("● LIVE TICKS · MATCH V10","ok");diag("open","Connected");send({ticks:el("market").value,subscribe:1});clearInterval(pingTimer);pingTimer=setInterval(()=>send({ping:1}),30000)};
+ ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){diag("API error",m.error.message);return}if(m.msg_type==="tick"&&m.tick)handleTick(m.tick)};
+ ws.onerror=()=>diag("socket error","Browser reported WebSocket error");ws.onclose=()=>{setStatus("Disconnected · reconnecting…","bad");diag("closed","Automatic reconnect");clearInterval(pingTimer);if(!manualClose){clearTimeout(reconnectTimer);reconnectTimer=setTimeout(connect,Math.min(10000,1000*Math.pow(2,retry++)))}}}
+function reset(){history=[];lastIdentity=null;duplicates=0;log=[];for(const c of C){c.n=c.w=c.l=0;c.done=false}render()}
+el("market").onchange=()=>{reset();connect()};el("resetBtn").onclick=reset;
+el("exportBtn").onclick=()=>{const lines=["candidate,prediction,family,value,signals,wins,losses,rate,status"];for(const c of C)lines.push([c.id,c.d,c.f,c.v,c.n,c.w,c.l,c.n?(c.w/c.n).toFixed(5):"",c.done?"DONE":"RUN"].join(","));
+ lines.push("","","","","","","","","");lines.push("DETAIL");lines.push("tick,epoch,quote,candidate,prediction,family,value,actual,result");
+ for(const r of log)lines.push([r.tick,r.epoch,r.quote,r.id,r.pred,r.family,r.value,r.actual,r.win?"WIN":"LOSS"].join(","));
+ const b=new Blob([lines.join("\n")],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="match_v10_multitest_results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
+el("endpoint").textContent="Endpoint: "+ENDPOINT;render();connect();
+})();
+</script></body></html>
