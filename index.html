@@ -19,7 +19,7 @@ table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:6px 4px;b
 </style>
 </head>
 <body><div class="app">
-<div class="hero"><h1>MATCH · Context Discovery V6</h1><p class="small">MATCH only · multi-stage discovery → qualified freeze → forward validation</p></div>
+<div class="hero"><h1>MATCH · Context Discovery V7</h1><p class="small">MATCH only · multi-stage discovery → qualified freeze → forward validation</p></div>
 
 <div class="card">
 <label class="small">Market</label>
@@ -48,12 +48,12 @@ table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:6px 4px;b
 <div><b id="best">0</b><br><span class="small">Best streak</span></div>
 <div><b id="dupes">0</b><br><span class="small">Duplicates</span></div>
 </div>
-<button id="resetBtn">NEW V6 TEST</button>
+<button id="resetBtn">NEW V7 TEST</button>
 <button id="exportBtn">EXPORT CSV</button>
 </div>
 
 <div class="card"><b>Frozen context profiles</b>
-<p class="small">V6 qualifies MATCH contexts by sample size, full-sample rate, recent stability and edge over the 10% digit baseline. Rates are descriptive, not guaranteed probabilities.</p>
+<p class="small">V7 freezes only MATCH contexts that pass sample size, recent stability and a Wilson lower-bound edge over the 10% digit baseline. Rates are descriptive, not guaranteed probabilities.</p>
 <div style="overflow:auto"><table><thead><tr><th>Digit</th><th>Context</th><th>Train W/N</th><th>Recent</th><th>Val W/L</th></tr></thead><tbody id="rules"><tr><td colspan="5">Discovering…</td></tr></tbody></table></div>
 </div>
 
@@ -67,8 +67,8 @@ table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:6px 4px;b
 (function(){
 "use strict";
 const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public";
-const TRAIN=3000, MIN_N=30, MIN_RATE=0.17, COOLDOWN=4;
-const MIN_EDGE=0.035, MIN_RECENT_N=8, MIN_RECENT_RATE=0.20;
+const TRAIN=3000, MIN_N=40, MIN_RATE=0.16, COOLDOWN=4;
+const MIN_EDGE=0.025, MIN_RECENT_N=12, MIN_RECENT_RATE=0.16, Z=1.2816;
 const el=id=>document.getElementById(id);
 
 let ws=null, reconnectTimer=null, pingTimer=null, retry=0, subscriptionId=null, manualClose=false;
@@ -107,25 +107,33 @@ function contextFor(d){
    history.length>1 && history.at(-1)===history.at(-2) ? 1 : 0
  ].join("|");
 }
+function wilsonLower(w,n){
+ if(!n) return 0;
+ const p=w/n,z2=Z*Z,den=1+z2/n;
+ return (p+z2/(2*n)-Z*Math.sqrt((p*(1-p)+z2/(4*n))/n))/den;
+}
 function learn(actual){
  if(history.length<100) return;
  for(let d=0;d<10;d++){
    const key=d+"#"+contextFor(d);
-   const r=trainMap.get(key)||{d:d,key:key,n:0,w:0};
+   const r=trainMap.get(key)||{d:d,key:key,n:0,w:0,recent:[]};
    r.n++;
-   if(actual===d) r.w++;
+   const hit=actual===d?1:0;
+   r.w+=hit; r.recent.push(hit);
+   if(r.recent.length>30) r.recent.shift();
    trainMap.set(key,r);
  }
 }
 function freeze(){
  profiles=[...trainMap.values()]
-   .filter(r=>r.n>=MIN_N && r.w/r.n>=MIN_RATE)
-   .map(r=>({d:r.d,key:r.key,n:r.n,w:r.w,rate:r.w/r.n,vw:0,vl:0}))
-   .sort((a,b)=>b.rate-a.rate||b.n-a.n);
+   .map(r=>{const recentN=r.recent.length,recentW=r.recent.reduce((a,b)=>a+b,0);return {...r,rate:r.w/r.n,recentN,recentW,recentRate:recentN?recentW/recentN:0,lower:wilsonLower(r.w,r.n)};})
+   .filter(r=>r.n>=MIN_N && r.rate>=MIN_RATE && r.lower>=0.10+MIN_EDGE && r.recentN>=MIN_RECENT_N && r.recentRate>=MIN_RECENT_RATE)
+   .map(r=>({...r,vw:0,vl:0}))
+   .sort((a,b)=>b.lower-a.lower||b.recentRate-a.recentRate||b.n-a.n);
  phase="validate";
  el("state").textContent="VALIDATE · "+profiles.length+" frozen profiles";
  el("why").textContent=profiles.length
-   ?"Discovery frozen. Only future unique ticks now count."
+   ?"Discovery frozen. Stricter qualified profiles only; future unique ticks now count."
    :"No context profile passed the discovery threshold.";
  render();
 }
@@ -153,7 +161,7 @@ function evaluate(){
    if(r) matches.push(r);
  }
  if(!matches.length){el("state").textContent="WATCH · no frozen context";return;}
- matches.sort((a,b)=>b.rate-a.rate||b.n-a.n);
+ matches.sort((a,b)=>b.lower-a.lower||b.recentRate-a.recentRate||b.n-a.n);
  const r=matches[0];
  pending={d:r.d,rule:r};
  el("state").textContent="PAPER SIGNAL · MATCH "+r.d;
@@ -199,7 +207,7 @@ function connect(){
  diag("CONNECTING",ENDPOINT);
  try{ws=new WebSocket(ENDPOINT);}catch(err){scheduleReconnect(String(err));return;}
  ws.onopen=function(){
-   retry=0; setStatus("● LIVE TICKS · MATCH V6","ok"); diag("CONNECTED","WebSocket handshake completed; subscribing.");
+   retry=0; setStatus("● LIVE TICKS · MATCH V7","ok"); diag("CONNECTED","WebSocket handshake completed; subscribing.");
    subscribe();
    pingTimer=setInterval(()=>send({ping:1}),25000);
  };
@@ -225,11 +233,11 @@ el("market").addEventListener("change",function(){
    setTimeout(subscribe,150);
  }else connect();
 });
-el("resetBtn").addEventListener("click",()=>{if(confirm("Start a completely new V6 test?"))resetTest();});
+el("resetBtn").addEventListener("click",()=>{if(confirm("Start a completely new V7 test?"))resetTest();});
 el("exportBtn").addEventListener("click",function(){
  const rows=[["tick","digit","context","actual","result","train_n","train_rate"],...log];
  const blob=new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
- const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="match_v6_results.csv";a.click();
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="match_v7_results.csv";a.click();
  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 });
 window.addEventListener("online",()=>{if(!ws||ws.readyState!==WebSocket.OPEN)connect();});
