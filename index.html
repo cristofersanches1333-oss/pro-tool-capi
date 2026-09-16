@@ -1,100 +1,72 @@
 <!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ProTrader MATCH Sequence Lab V3</title>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ProTrader MATCH Lab V4</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial,sans-serif;color:#292b31}.app{max-width:540px;margin:auto;min-height:100vh;background:#fff;padding-bottom:30px}
 header{padding:20px;font-size:21px;font-weight:800;border-bottom:1px solid #eee}header span{color:#7657e8}.hero{text-align:center;padding:22px 15px 10px}.hero h1{font-size:24px;margin:0}.hero p{color:#777;font-size:13px}
 .card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}label{font-size:12px;color:#777;display:block;margin-bottom:6px}
 select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}button{border:0;background:#7657e8;color:#fff;margin-top:10px}
 .status{padding:11px;text-align:center;border-radius:9px;background:#eaf8f1;color:#168653;font-size:13px}.signal{text-align:center;padding:16px;border-radius:12px;background:#f5f3ff;color:#5b3fd6;font-weight:900;font-size:22px}
-.small{font-size:12px;color:#777;line-height:1.45}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}.stats b{font-size:20px}.table{width:100%;border-collapse:collapse;font-size:11px}.table th,.table td{padding:6px;border-bottom:1px solid #eee;text-align:left}
-.grid10{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.digit{padding:8px 4px;border:1px solid #eee;border-radius:8px;text-align:center;font-size:11px}.diag{background:#111827;color:#e5e7eb;font:11px monospace;line-height:1.5}
-</style></head>
-<body><div class="app">
+.small{font-size:12px;color:#777;line-height:1.45}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}.stats b{font-size:20px}
+.table{width:100%;border-collapse:collapse;font-size:11px}.table th,.table td{padding:7px 5px;border-bottom:1px solid #eee;text-align:left}.diag{background:#111827;color:#e5e7eb;font:11px monospace;line-height:1.5}
+</style></head><body><div class="app">
 <header>ProTrader <span>MATCH Lab</span></header>
-<div class="hero"><h1>MATCH · Sequence Discovery V3</h1><p>Train → freeze → forward validation · next unique tick only</p></div>
+<div class="hero"><h1>MATCH · Prospective Validation V4</h1><p>Frozen V3 candidates → new ticks only · no relearning</p></div>
 <div class="card"><label>Market</label><select id="market">
 <option value="1HZ100V" selected>Volatility 100 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ10V">Volatility 10 (1s)</option>
 </select><div id="status" class="status" style="margin-top:12px">Connecting…</div></div>
-
-<div class="card"><div id="state" class="signal">TRAIN · 0/1000</div>
-<p id="why" class="small">Collecting a fixed training sample. No validation signal is scored during training.</p>
+<div class="card"><div id="state" class="signal">WARMUP · 0/20</div>
+<p id="why" class="small">V4 will test only frozen candidate sequences selected from the completed V3 file. V4 results cannot change the rules.</p>
 <div class="stats"><div><b id="ticks">0</b><br><span class="small">Ticks</span></div><div><b id="signals">0</b><br><span class="small">Signals</span></div><div><b id="wins">0</b><br><span class="small">Wins</span></div><div><b id="rate">—</b><br><span class="small">Observed</span></div></div>
-<div class="stats" style="margin-top:14px"><div><b id="losses">0</b><br><span class="small">Losses</span></div><div><b id="patterns">0</b><br><span class="small">Frozen patterns</span></div><div><b id="best">0</b><br><span class="small">Best streak</span></div><div><b id="dupes">0</b><br><span class="small">Duplicates</span></div></div>
-<button id="reset">NEW MATCH TEST</button><button id="export">EXPORT CSV</button></div>
-
-<div class="card"><b>Forward results by digit</b><div id="digits" class="grid10" style="margin-top:10px"></div></div>
-<div class="card"><b>Frozen sequence rules</b><p class="small">Rules are learned only from the first 1,000 ticks, then frozen. A rule needs ≥8 training occurrences and ≥25% training MATCH rate. This is a discovery threshold, not a claimed probability.</p>
-<div style="overflow:auto"><table class="table"><thead><tr><th>Seq.</th><th>→</th><th>Train n</th><th>Train rate</th><th>Val W/L</th></tr></thead><tbody id="rules"><tr><td colspan="5">Waiting for training.</td></tr></tbody></table></div></div>
+<div class="stats" style="margin-top:14px"><div><b id="losses">0</b><br><span class="small">Losses</span></div><div><b id="best">0</b><br><span class="small">Best streak</span></div><div><b id="current">0</b><br><span class="small">Current</span></div><div><b id="dupes">0</b><br><span class="small">Duplicates</span></div></div>
+<button id="reset">NEW V4 TEST</button><button id="export">EXPORT CSV</button></div>
+<div class="card"><b>Frozen V3 candidates</b><p class="small">“V3 rate” is historical discovery data only. The V4 W/L column is the independent result we care about.</p>
+<div style="overflow:auto"><table class="table"><thead><tr><th>Sequence</th><th>Signal</th><th>V3 W/N</th><th>V3 rate</th><th>V4 W/L</th></tr></thead><tbody id="rules"></tbody></table></div></div>
 <div class="card diag" id="diag">Connection diagnostics: starting…</div>
-</div>
-<script>
+</div><script>
 (()=>{
-const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public", TRAIN=1000, MIN_N=8, MIN_RATE=.25, COOLDOWN=4;
-let ws=null,retry=0,timer=null,pinger=null,subId=null,lastId=null,dupes=0,h=[],phase="train",rules=[],pending=null,cool=0;
-let signals=0,wins=0,losses=0,best=0,streak=0,log=[],by=Array.from({length:10},()=>({w:0,l:0}));
+const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public",WARMUP=20,COOLDOWN=4;
+const rules=[{seq:[6,9],next:8,sourceN:13,sourceW:4,w:0,l:0},{seq:[2,7],next:7,sourceN:11,sourceW:3,w:0,l:0},{seq:[1,7],next:2,sourceN:13,sourceW:3,w:0,l:0},{seq:[4,1],next:8,sourceN:13,sourceW:3,w:0,l:0},{seq:[6,7],next:1,sourceN:10,sourceW:2,w:0,l:0},{seq:[8,6],next:5,sourceN:10,sourceW:2,w:0,l:0}];
+let ws=null,retry=0,timer=null,pinger=null,subId=null,lastId=null,dupes=0,h=[],pending=null,cool=0;
+let signals=0,wins=0,losses=0,best=0,streak=0,log=[];
 const $=x=>document.getElementById(x);
-function setStatus(t,bad=false){$("status").textContent=t;$("status").style.background=bad?"#fff0f2":"#eaf8f1";$("status").style.color=bad?"#b63b4b":"#168653"}
 function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
+function status(t,bad=false){$("status").textContent=t;$("status").style.background=bad?"#fff0f2":"#eaf8f1";$("status").style.color=bad?"#b63b4b":"#168653"}
 function draw(){
- $("ticks").textContent=h.length;$("signals").textContent=signals;$("wins").textContent=wins;$("losses").textContent=losses;$("rate").textContent=signals?(100*wins/signals).toFixed(1)+"%":"—";$("patterns").textContent=rules.length;$("best").textContent=best;$("dupes").textContent=dupes;
- $("digits").innerHTML=by.map((x,i)=>`<div class="digit"><b>${i}</b><br>${x.w}/${x.l}<br>${x.w+x.l?(100*x.w/(x.w+x.l)).toFixed(1)+"%":"—"}</div>`).join("");
- $("rules").innerHTML=rules.length?rules.slice(0,30).map(r=>`<tr><td>${r.seq.join("")}</td><td>MATCH ${r.next}</td><td>${r.n}</td><td>${(100*r.rate).toFixed(1)}%</td><td>${r.vw}/${r.vl}</td></tr>`).join(""):'<tr><td colspan="5">Waiting for training.</td></tr>';
-}
-function learn(){
- const map=new Map();
- for(let len=2;len<=4;len++) for(let i=0;i+len<h.length;i++){
-   const seq=h.slice(i,i+len), next=h[i+len], key=seq.join("");
-   if(!map.has(key))map.set(key,{seq,n:0,c:Array(10).fill(0)});
-   let r=map.get(key);r.n++;r.c[next]++;
- }
- let out=[];
- for(const r of map.values()) if(r.n>=MIN_N){
-   let mx=Math.max(...r.c),d=r.c.indexOf(mx),rate=mx/r.n;
-   if(rate>=MIN_RATE)out.push({seq:r.seq,next:d,n:r.n,rate,vw:0,vl:0});
- }
- out.sort((a,b)=>b.rate-a.rate||b.n-a.n); rules=out; phase="validate";
- $("state").textContent=`VALIDATE · ${rules.length} frozen rules`;
- $("why").textContent=rules.length?"Training is frozen. Only future ticks can score these rules.":"No training rule passed the threshold; keep collecting only if you start a new test with a different design.";
- draw();
+ $("ticks").textContent=h.length;$("signals").textContent=signals;$("wins").textContent=wins;$("losses").textContent=losses;$("rate").textContent=signals?(100*wins/signals).toFixed(1)+"%":"—";$("best").textContent=best;$("current").textContent=streak;$("dupes").textContent=dupes;
+ $("rules").innerHTML=rules.map(r=>`<tr><td>${r.seq.join("")}</td><td>MATCH ${r.next}</td><td>${r.sourceW}/${r.sourceN}</td><td>${(100*r.sourceW/r.sourceN).toFixed(1)}%</td><td><b>${r.w}/${r.l}</b></td></tr>`).join("");
 }
 function score(d){
- if(!pending)return;
- let ok=d===pending.next;signals++;
- if(ok){wins++;streak++;best=Math.max(best,streak);by[pending.next].w++;pending.rule.vw++}
- else{losses++;streak=0;by[pending.next].l++;pending.rule.vl++}
- log.push({tick:h.length,seq:pending.rule.seq.join(""),prediction:pending.next,actual:d,result:ok?"WIN":"LOSS",train_n:pending.rule.n,train_rate:pending.rule.rate});
+ if(!pending)return;let ok=d===pending.rule.next;signals++;
+ if(ok){wins++;streak++;best=Math.max(best,streak);pending.rule.w++}else{losses++;streak=0;pending.rule.l++}
+ log.push({tick:h.length,sequence:pending.rule.seq.join(""),prediction:pending.rule.next,actual:d,result:ok?"WIN":"LOSS"});
  pending=null;cool=COOLDOWN;
 }
 function evaluate(){
- if(phase==="train"){ $("state").textContent=`TRAIN · ${h.length}/${TRAIN}`; if(h.length>=TRAIN)learn(); return }
- if(pending)return;
- if(cool>0){cool--;$("state").textContent=`WAIT · cooldown ${cool}`;return}
- let matches=rules.filter(r=>h.length>=r.seq.length && r.seq.every((d,j)=>h[h.length-r.seq.length+j]===d));
- if(!matches.length){$("state").textContent="WATCH · no frozen sequence";return}
- matches.sort((a,b)=>b.seq.length-a.seq.length||b.rate-a.rate||b.n-a.n);
- let r=matches[0]; pending={next:r.next,rule:r}; $("state").textContent=`PAPER SIGNAL · MATCH ${r.next}`;
- $("why").textContent=`Frozen sequence ${r.seq.join(" → ")} · training ${r.n} occurrences · ${(100*r.rate).toFixed(1)}% historical MATCH. Next unique tick scores it.`;
+ if(h.length<WARMUP){$("state").textContent=`WARMUP · ${h.length}/${WARMUP}`;return}
+ if(pending)return;if(cool>0){cool--;$("state").textContent=`WAIT · cooldown ${cool}`;return}
+ let m=rules.filter(r=>r.seq.every((d,j)=>h[h.length-r.seq.length+j]===d));
+ if(!m.length){$("state").textContent="WATCH · no frozen candidate";$("why").textContent="Waiting for one of the six frozen V3 sequences. No adaptive selection is performed.";return}
+ m.sort((a,b)=>(b.sourceW/b.sourceN)-(a.sourceW/a.sourceN));
+ let r=m[0];pending={rule:r};$("state").textContent=`PAPER SIGNAL · MATCH ${r.next}`;
+ $("why").textContent=`Frozen sequence ${r.seq.join(" → ")} detected. The next unique tick alone scores this signal.`;
 }
-function tick(m){
+function onTick(m){
  let q=Number(m.tick.quote).toFixed(m.tick.pip_size??2),d=Number(q.slice(-1)),id=String(m.tick.epoch??"")+"|"+q;
- if(id===lastId){dupes++;draw();return} lastId=id;if(!Number.isFinite(d))return;
- if(phase==="validate")score(d);h.push(d);if(phase==="train"&&h.length>TRAIN)h=h.slice(-TRAIN);evaluate();draw();
+ if(id===lastId){dupes++;draw();return}lastId=id;if(!Number.isFinite(d))return;
+ score(d);h.push(d);if(h.length>5000)h.shift();evaluate();draw();
 }
 function subscribe(){subId=null;send({ticks:$("market").value,subscribe:1,req_id:1})}
-function connect(){clearTimeout(timer);clearInterval(pinger);setStatus("Connecting…");try{ws=new WebSocket(ENDPOINT)}catch(e){return reconnect()}
- ws.onopen=()=>{retry=0;setStatus("● LIVE TICKS · MATCH V3");subscribe();pinger=setInterval(()=>send({ping:1}),25000)};
- ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){$("diag").textContent="API: "+m.error.message;return}if(m.subscription?.id)subId=m.subscription.id;if(m.msg_type==="tick"&&m.tick)tick(m)};
- ws.onerror=()=>setStatus("Connection interrupted",true);ws.onclose=()=>{clearInterval(pinger);reconnect()}
+function reconnect(){clearTimeout(timer);let ms=Math.min(12000,1000*Math.pow(1.6,retry++));status("Disconnected · reconnecting…",true);timer=setTimeout(connect,ms)}
+function connect(){clearTimeout(timer);clearInterval(pinger);status("Connecting…");try{ws=new WebSocket(ENDPOINT)}catch(e){reconnect();return}
+ ws.onopen=()=>{retry=0;status("● LIVE TICKS · MATCH V4");subscribe();pinger=setInterval(()=>send({ping:1}),25000)};
+ ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){$("diag").textContent="API: "+m.error.message;return}if(m.subscription?.id)subId=m.subscription.id;if(m.msg_type==="tick"&&m.tick)onTick(m)};
+ ws.onerror=()=>status("Connection interrupted",true);ws.onclose=()=>{clearInterval(pinger);reconnect()};
 }
-function reconnect(){clearTimeout(timer);let ms=Math.min(12000,1000*Math.pow(1.6,retry++));setStatus("Disconnected · reconnecting…",true);timer=setTimeout(connect,ms)}
-function reset(){h=[];phase="train";rules=[];pending=null;cool=0;signals=wins=losses=best=streak=dupes=0;log=[];by=Array.from({length:10},()=>({w:0,l:0}));lastId=null;$("why").textContent="Collecting a fixed training sample. No validation signal is scored during training.";draw();evaluate()}
+function reset(){h=[];pending=null;cool=0;signals=wins=losses=best=streak=dupes=0;log=[];lastId=null;rules.forEach(r=>{r.w=0;r.l=0});$("why").textContent="V4 is a fresh prospective test. Frozen rules do not change.";draw();evaluate()}
 $("market").onchange=()=>{if(subId)send({forget:subId});reset();setTimeout(subscribe,150)};
-$("reset").onclick=()=>{if(confirm("Start a completely new MATCH V3 test?"))reset()};
-$("export").onclick=()=>{let rows=[["tick","sequence","prediction","actual","result","train_n","train_rate"],...log.map(x=>[x.tick,x.seq,x.prediction,x.actual,x.result,x.train_n,x.train_rate])];let blob=new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="match_v3_results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
-$("diag").textContent="Endpoint: "+ENDPOINT+" · public tick feed · no account login.";
-draw();connect();
+$("reset").onclick=()=>{if(confirm("Start a completely new V4 validation?"))reset()};
+$("export").onclick=()=>{let rows=[["tick","sequence","prediction","actual","result"],...log.map(x=>[x.tick,x.sequence,x.prediction,x.actual,x.result])];let blob=new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="match_v4_results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+$("diag").textContent="Endpoint: "+ENDPOINT+" · public tick feed · prospective paper validation.";draw();connect();
 })();
 </script></body></html>
