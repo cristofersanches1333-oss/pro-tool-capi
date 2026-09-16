@@ -1,50 +1,28 @@
-<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MATCH Event Profiler V12</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial,sans-serif;color:#292b31}.app{max-width:720px;margin:auto;min-height:100vh;background:#fff;padding-bottom:30px}
-.hero{text-align:center;padding:24px 16px 8px}.hero h1{margin:0;font-size:24px}.small{font-size:12px;color:#777;line-height:1.45}
-.card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}
-select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}button{border:0;background:#7657e8;color:#fff;margin-top:10px}
-.status,.state{padding:12px;border-radius:10px;text-align:center;margin-top:12px}.status{background:#f4f1ff;color:#654db5}.ok{background:#eaf8f1;color:#168653}.bad{background:#fff0f2;color:#b63b4b}
-.state{background:#f5f3ff;color:#5b3fd6;font-size:20px;font-weight:900}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-top:15px}.stats b{font-size:18px}
-table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:7px 4px;border-bottom:1px solid #eee;text-align:left}.diag{background:#111827;color:#e5e7eb;font:11px ui-monospace,monospace;line-height:1.55}
-</style></head><body><div class="app">
-<div class="hero"><h1>MATCH · Event Profiler V12</h1><p class="small">MATCH only · perfila WIN vs LOSS de los 2 supervivientes · sin reajuste</p></div>
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MATCH Frozen Validation V13</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f7;font-family:Arial,sans-serif;color:#292b31}.app{max-width:720px;margin:auto;min-height:100vh;background:#fff;padding-bottom:30px}.hero{text-align:center;padding:24px 16px 8px}.hero h1{margin:0;font-size:24px}.small{font-size:12px;color:#777;line-height:1.45}.card{margin:14px 16px;padding:16px;border:1px solid #e5e5e8;border-radius:15px;box-shadow:0 5px 18px #0000000b}select,button{width:100%;height:46px;border-radius:9px;border:1px solid #ddd;background:#fff;padding:0 10px;font-weight:700}button{border:0;background:#7657e8;color:#fff;margin-top:10px}.status,.state{padding:12px;border-radius:10px;text-align:center;margin-top:12px}.status{background:#f4f1ff;color:#654db5}.ok{background:#eaf8f1;color:#168653}.bad{background:#fff0f2;color:#b63b4b}.state{background:#f5f3ff;color:#5b3fd6;font-size:20px;font-weight:900}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-top:15px}.stats b{font-size:18px}table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:7px 4px;border-bottom:1px solid #eee;text-align:left}.done{background:#eefaf3;font-weight:900}.diag{background:#111827;color:#e5e7eb;font:11px ui-monospace,monospace;line-height:1.55}</style></head><body><div class="app">
+<div class="hero"><h1>MATCH · Frozen Validation V13</h1><p class="small">MATCH 4 · reglas congeladas desde V12 · forward puro · sin aprendizaje</p></div>
 <div class="card"><label class="small">Market</label><select id="market"><option value="1HZ100V" selected>Volatility 100 (1s)</option><option value="1HZ75V">Volatility 75 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ25V">Volatility 25 (1s)</option><option value="1HZ10V">Volatility 10 (1s)</option></select><div id="status" class="status">Starting…</div></div>
-<div class="card"><div id="state" class="state">WARMUP · 0/100</div><p class="small">Supervivientes fijos: MATCH 9 / F20=3 y MATCH 4 / F50=1. Cada activación guarda el contexto previo completo para comparar aciertos y fallos offline.</p>
-<div class="stats"><div><b id="ticks">0</b><br><span class="small">Ticks</span></div><div><b id="events">0</b><br><span class="small">Eventos</span></div><div><b id="wins">0</b><br><span class="small">Wins</span></div><div><b id="rate">—</b><br><span class="small">Global</span></div></div>
-<button id="resetBtn">NEW V12 TEST</button><button id="exportBtn">EXPORT CSV</button></div>
-<div class="card"><b>Survivor profiler</b><div style="overflow:auto"><table><thead><tr><th>Pred.</th><th>Trigger</th><th>W/N</th><th>Rate</th><th>Target</th></tr></thead><tbody id="rows"></tbody></table></div></div>
-<div class="card diag"><b>Connection diagnostics</b><div id="endpoint"></div><div id="wsState">State: starting…</div><div id="wsDetail">Detail: —</div></div>
-</div><script>
-(function(){"use strict";
-const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public",WARMUP=100,TARGET=80;
-const C=[{id:1,d:9,f:"F20",v:"3",n:0,w:0},{id:2,d:4,f:"F50",v:"1",n:0,w:0}];
+<div class="card"><div id="state" class="state">WARMUP · 0/100</div><p class="small">Base fija: MATCH 4 + F50 bucket 1. V13 prueba las tres condiciones V12 y sus intersecciones. Cada variante se congela al llegar a 30 señales.</p><div class="stats"><div><b id="ticks">0</b><br><span class="small">Ticks</span></div><div><b id="active">7</b><br><span class="small">Activas</span></div><div><b id="done">0</b><br><span class="small">Completas</span></div><div><b id="dupes">0</b><br><span class="small">Duplicados</span></div></div><button id="resetBtn">NEW V13 TEST</button><button id="exportBtn">EXPORT CSV</button></div>
+<div class="card"><b>Frozen forward ranking</b><div style="overflow:auto"><table><thead><tr><th>#</th><th>Regla adicional</th><th>W/N</th><th>Rate</th><th>Estado</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<div class="card diag"><b>Connection diagnostics</b><div id="endpoint"></div><div id="wsState">State: starting…</div><div id="wsDetail">Detail: —</div></div></div>
+<script>(function(){"use strict";
+const ENDPOINT="wss://api.derivws.com/trading/v1/options/ws/public",WARMUP=100,TARGET=30;
+const C=[
+{id:1,name:"F20B=2",test:x=>x.f20b===2},{id:2,name:"F100B=1",test:x=>x.f100b===1},{id:3,name:"GAPB=0",test:x=>x.gapb===0},
+{id:4,name:"F20B=2 + GAPB=0",test:x=>x.f20b===2&&x.gapb===0},{id:5,name:"F20B=2 + F100B=1",test:x=>x.f20b===2&&x.f100b===1},
+{id:6,name:"F100B=1 + GAPB=0",test:x=>x.f100b===1&&x.gapb===0},{id:7,name:"TRIPLE",test:x=>x.f20b===2&&x.f100b===1&&x.gapb===0}
+].map(c=>({...c,n:0,w:0,done:false}));
 const el=id=>document.getElementById(id);let ws=null,reconnectTimer=null,pingTimer=null,retry=0,manualClose=false,history=[],lastIdentity=null,duplicates=0,log=[];
 function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
-function gapRaw(d){for(let i=history.length-1,g=0;i>=0;i--,g++)if(history[i]===d)return g;return 99}
+function gap(d){for(let i=history.length-1,g=0;i>=0;i--,g++)if(history[i]===d)return g;return 99}
 function freq(d,n){const a=history.slice(-n);return a.length?a.filter(x=>x===d).length/a.length:0}
-function bucket(x,cuts){for(let i=0;i<cuts.length;i++)if(x<=cuts[i])return i;return cuts.length}
-function trigger(c){if(c.f==="F20")return String(bucket(freq(c.d,20),[.05,.10,.15,.20]))===c.v;if(c.f==="F50")return String(bucket(freq(c.d,50),[.06,.10,.14,.18]))===c.v;return false}
-function snapshot(c,actual,t,q){
- const g=gapRaw(c.d),f20=freq(c.d,20),f50=freq(c.d,50),f100=freq(c.d,100),last1=history.at(-1),last2=history.at(-2),last3=history.at(-3);
- const rep1=(last1===last2)?1:0, samePredLast=(last1===c.d)?1:0;
- return {tick:history.length+1,epoch:t.epoch??"",quote:q,candidate:c.id,pred:c.d,trigger:c.f+"="+c.v,actual,win:actual===c.d?1:0,
- gap:g,f20,f50,f100,last1,last2,last3,repeat:rep1,predWasLast:samePredLast,
- gapBucket:bucket(g,[2,5,9,15,25]),f20Bucket:bucket(f20,[.05,.10,.15,.20]),f50Bucket:bucket(f50,[.06,.10,.14,.18]),f100Bucket:bucket(f100,[.07,.09,.11,.13,.16])};
-}
-function render(){let ev=C.reduce((s,c)=>s+c.n,0),w=C.reduce((s,c)=>s+c.w,0);el("ticks").textContent=history.length;el("events").textContent=ev;el("wins").textContent=w;el("rate").textContent=ev?(100*w/ev).toFixed(1)+"%":"—";
- el("state").textContent=history.length<WARMUP?"WARMUP · "+history.length+"/"+WARMUP:"PROFILE FORWARD · "+C.filter(c=>c.n>=TARGET).length+"/2 target";
- el("rows").innerHTML=C.map(c=>"<tr><td>MATCH "+c.d+"</td><td>"+c.f+"="+c.v+"</td><td>"+c.w+"/"+c.n+"</td><td>"+(c.n?(100*c.w/c.n).toFixed(1)+"%":"—")+"</td><td>"+Math.min(c.n,TARGET)+"/"+TARGET+"</td></tr>").join("")}
-function handleTick(t){const pip=t.pip_size==null?2:t.pip_size,q=Number(t.quote).toFixed(pip),d=Number(q.slice(-1)),id=String(t.epoch??"")+"|"+q;if(id===lastIdentity){duplicates++;return}lastIdentity=id;if(!Number.isFinite(d))return;
- if(history.length>=WARMUP){for(const c of C){if(c.n>=TARGET||!trigger(c))continue;const r=snapshot(c,d,t,q);c.n++;c.w+=r.win;log.push(r)}}history.push(d);render()}
-function setStatus(t,type){const e=el("status");e.textContent=t;e.className="status"+(type==="ok"?" ok":type==="bad"?" bad":"")}
-function diag(s,d){el("wsState").textContent="State: "+s;el("wsDetail").textContent="Detail: "+(d||"—")}
-function connect(){manualClose=false;try{if(ws)ws.close()}catch(e){}setStatus("Connecting…");diag("connecting",ENDPOINT);ws=new WebSocket(ENDPOINT);ws.onopen=()=>{retry=0;setStatus("● LIVE TICKS · MATCH V12","ok");diag("open","Connected");send({ticks:el("market").value,subscribe:1});clearInterval(pingTimer);pingTimer=setInterval(()=>send({ping:1}),30000)};
- ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){diag("API error",m.error.message);return}if(m.msg_type==="tick"&&m.tick)handleTick(m.tick)};ws.onerror=()=>diag("socket error","Browser WebSocket error");ws.onclose=()=>{setStatus("Disconnected · reconnecting…","bad");diag("closed","Automatic reconnect");clearInterval(pingTimer);if(!manualClose){clearTimeout(reconnectTimer);reconnectTimer=setTimeout(connect,Math.min(10000,1000*Math.pow(2,retry++)))}}}
-function reset(){history=[];lastIdentity=null;duplicates=0;log=[];for(const c of C){c.n=0;c.w=0}render()}
-el("market").onchange=()=>{reset();connect()};el("resetBtn").onclick=reset;
-el("exportBtn").onclick=()=>{const cols=["tick","epoch","quote","candidate","pred","trigger","actual","win","gap","f20","f50","f100","last1","last2","last3","repeat","predWasLast","gapBucket","f20Bucket","f50Bucket","f100Bucket"];
- const lines=[cols.join(",")];for(const r of log)lines.push(cols.map(k=>r[k]).join(","));const b=new Blob([lines.join("\n")],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="match_v12_event_profiles.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
-el("endpoint").textContent="Endpoint: "+ENDPOINT;render();connect();
-})();</script></body></html>
+function bucket(x,c){for(let i=0;i<c.length;i++)if(x<=c[i])return i;return c.length}
+function ctx(){const d=4,g=gap(d),f20=freq(d,20),f50=freq(d,50),f100=freq(d,100);return{g,f20,f50,f100,gapb:bucket(g,[2,5,9,15,25]),f20b:bucket(f20,[.05,.10,.15,.20]),f50b:bucket(f50,[.06,.10,.14,.18]),f100b:bucket(f100,[.07,.09,.11,.13,.16])}}
+function render(){const dn=C.filter(c=>c.done).length;el("ticks").textContent=history.length;el("done").textContent=dn;el("active").textContent=C.length-dn;el("dupes").textContent=duplicates;el("state").textContent=history.length<WARMUP?"WARMUP · "+history.length+"/"+WARMUP:(dn===C.length?"V13 COMPLETE":"FROZEN FORWARD · "+dn+"/"+C.length+" complete");const s=[...C].sort((a,b)=>(b.n?b.w/b.n:0)-(a.n?a.w/a.n:0)||b.n-a.n);el("rows").innerHTML=s.map((c,i)=>"<tr class='"+(c.done?"done":"")+"'><td>"+(i+1)+"</td><td>"+c.name+"</td><td>"+c.w+"/"+c.n+"</td><td>"+(c.n?(100*c.w/c.n).toFixed(1)+"%":"—")+"</td><td>"+(c.done?"DONE":"RUN")+"</td></tr>").join("")}
+function handleTick(t){const pip=t.pip_size==null?2:t.pip_size,q=Number(t.quote).toFixed(pip),d=Number(q.slice(-1)),id=String(t.epoch??"")+"|"+q;if(id===lastIdentity){duplicates++;render();return}lastIdentity=id;if(!Number.isFinite(d))return;if(history.length>=WARMUP){const x=ctx();if(x.f50b===1){for(const c of C){if(c.done||!c.test(x))continue;const win=d===4?1:0;c.n++;c.w+=win;log.push({tick:history.length+1,epoch:t.epoch??"",quote:q,id:c.id,rule:c.name,actual:d,win,gap:x.g,f20:x.f20,f50:x.f50,f100:x.f100,gapb:x.gapb,f20b:x.f20b,f50b:x.f50b,f100b:x.f100b});if(c.n>=TARGET)c.done=true}}}history.push(d);render()}
+function setStatus(t,type){const e=el("status");e.textContent=t;e.className="status"+(type==="ok"?" ok":type==="bad"?" bad":"")}function diag(s,d){el("wsState").textContent="State: "+s;el("wsDetail").textContent="Detail: "+(d||"—")}
+function connect(){manualClose=false;try{if(ws)ws.close()}catch(e){}setStatus("Connecting…");diag("connecting",ENDPOINT);ws=new WebSocket(ENDPOINT);ws.onopen=()=>{retry=0;setStatus("● LIVE TICKS · MATCH V13","ok");diag("open","Connected");send({ticks:el("market").value,subscribe:1});clearInterval(pingTimer);pingTimer=setInterval(()=>send({ping:1}),30000)};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.error){diag("API error",m.error.message);return}if(m.msg_type==="tick"&&m.tick)handleTick(m.tick)};ws.onerror=()=>diag("socket error","Browser WebSocket error");ws.onclose=()=>{setStatus("Disconnected · reconnecting…","bad");diag("closed","Automatic reconnect");clearInterval(pingTimer);if(!manualClose){clearTimeout(reconnectTimer);reconnectTimer=setTimeout(connect,Math.min(10000,1000*Math.pow(2,retry++)))}}}
+function reset(){history=[];lastIdentity=null;duplicates=0;log=[];for(const c of C){c.n=c.w=0;c.done=false}render()}el("market").onchange=()=>{reset();connect()};el("resetBtn").onclick=reset;
+el("exportBtn").onclick=()=>{const sum=["candidate,rule,signals,wins,losses,rate,status"];for(const c of C)sum.push([c.id,'"'+c.name+'"',c.n,c.w,c.n-c.w,c.n?(c.w/c.n).toFixed(5):"",c.done?"DONE":"RUN"].join(","));sum.push("","","","","","","");sum.push("DETAIL");const cols=["tick","epoch","quote","id","rule","actual","win","gap","f20","f50","f100","gapb","f20b","f50b","f100b"];sum.push(cols.join(","));for(const r of log)sum.push(cols.map(k=>r[k]).join(","));const b=new Blob([sum.join("\n")],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="match_v13_frozen_validation.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
+el("endpoint").textContent="Endpoint: "+ENDPOINT;render();connect()})();</script></body></html>
