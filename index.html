@@ -1,58 +1,77 @@
 <!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gold Analyzer V1</title>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gold Analyzer Auto V1</title>
 <style>
-:root{--bg:#0b0e13;--card:#131923;--line:#273244;--text:#edf2f7;--muted:#8fa0b5;--gold:#d6aa42;--green:#28c281;--red:#ef5b5b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,Arial;padding:18px}
-.wrap{max-width:920px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-h1{font-size:24px;margin:0}.tag{color:var(--gold);font-weight:700}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.wide{grid-column:1/-1}
-label{display:block;color:var(--muted);margin-bottom:7px}input{width:100%;padding:11px;border-radius:9px;border:1px solid var(--line);background:#0d121a;color:white;font-size:16px}
-button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--gold);color:#111;font-weight:800;cursor:pointer}
-.value{font-size:26px;font-weight:800}.muted{color:var(--muted)}.signal{font-size:34px;font-weight:900}.buy{color:var(--green)}.sell{color:var(--red)}.wait{color:var(--gold)}
-.bar{height:9px;background:#242c38;border-radius:8px;overflow:hidden;margin-top:10px}.fill{height:100%;background:var(--gold);width:0}
-ul{line-height:1.8;padding-left:20px}@media(max-width:650px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
-</style></head>
-<body><div class="wrap">
-<div class="head"><div><h1>GOLD ANALYZER</h1><div class="muted">Proyecto independiente · XAUUSD</div></div><div class="tag">V1</div></div>
+:root{--b:#080b10;--c:#111722;--l:#263143;--t:#eef3f8;--m:#8d9caf;--g:#d7ac48;--up:#24c486;--dn:#f05d63}
+*{box-sizing:border-box}body{margin:0;background:var(--b);color:var(--t);font:14px system-ui;padding:18px}.w{max-width:980px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}h1{margin:0;font-size:24px}.gold{color:var(--g)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}.card{background:var(--c);border:1px solid var(--l);border-radius:14px;padding:15px}.wide{grid-column:1/-1}
+.lab{color:var(--m);font-size:12px;margin-bottom:6px}.big{font-size:25px;font-weight:850}.sig{font-size:31px;font-weight:900}
+.up{color:var(--up)}.dn{color:var(--dn)}.wait{color:var(--g)}button,input{border-radius:9px;border:1px solid var(--l);padding:11px}
+button{background:var(--g);font-weight:800;cursor:pointer}input{background:#0b1018;color:white;width:100%}.row{display:flex;gap:8px}.row input{flex:1}.status{font-size:12px;color:var(--m)}
+.bar{height:8px;background:#252d39;border-radius:9px;overflow:hidden;margin-top:8px}.fill{height:100%;background:var(--g);width:0}
+ul{line-height:1.65;padding-left:20px;margin-bottom:0}@media(max-width:700px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:460px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style></head><body><div class="w">
+<header><div><h1>GOLD <span class="gold">ANALYZER</span></h1><div class="status">XAU/USD · análisis automático · proyecto independiente</div></div><b>V1 AUTO</b></header>
+<div class="card wide" id="setup">
+ <div class="lab">CONEXIÓN DE DATOS</div>
+ <div class="row"><input id="key" type="password" placeholder="API key de Twelve Data (se guarda solo en este navegador)"><button onclick="saveKey()">CONECTAR</button></div>
+ <div class="status" style="margin-top:8px">Después de conectar, el analizador descarga las velas automáticamente. No introduces precios ni indicadores.</div>
+</div><br>
 <div class="grid">
-<div class="card"><label>Precio actual XAUUSD</label><input id="price" type="number" step="0.01" placeholder="Ej. 3650.00"></div>
-<div class="card"><label>Máximo reciente</label><input id="high" type="number" step="0.01" placeholder="Máximo"></div>
-<div class="card"><label>Mínimo reciente</label><input id="low" type="number" step="0.01" placeholder="Mínimo"></div>
-<div class="card"><label>EMA rápida</label><input id="fast" type="number" step="0.01" placeholder="EMA 20"></div>
-<div class="card"><label>EMA lenta</label><input id="slow" type="number" step="0.01" placeholder="EMA 50"></div>
-<div class="card"><label>RSI</label><input id="rsi" type="number" step="0.1" min="0" max="100" placeholder="0–100"></div>
-<div class="card wide"><button onclick="analyze()">ANALIZAR ORO</button></div>
-<div class="card"><label>Señal</label><div id="signal" class="signal wait">ESPERAR</div></div>
-<div class="card"><label>Objetivo de extensión</label><div id="target" class="value">—</div><div class="muted">100 pips configurables</div></div>
-<div class="card"><label>Confianza técnica</label><div id="score" class="value">0%</div><div class="bar"><div id="fill" class="fill"></div></div></div>
-<div class="card wide"><label>Lectura del motor V1</label><ul id="why"><li>Introduce datos para iniciar el análisis.</li></ul></div>
-</div></div>
+ <div class="card"><div class="lab">PRECIO</div><div id="price" class="big">—</div></div>
+ <div class="card"><div class="lab">SEÑAL</div><div id="signal" class="sig wait">SIN DATOS</div></div>
+ <div class="card"><div class="lab">SCORE</div><div id="score" class="big">—</div><div class="bar"><div id="fill" class="fill"></div></div></div>
+ <div class="card"><div class="lab">ÚLTIMA ACTUALIZACIÓN</div><div id="time" class="big" style="font-size:17px">—</div></div>
+ <div class="card"><div class="lab">EMA 20 / EMA 50</div><div id="emas" class="big" style="font-size:17px">—</div></div>
+ <div class="card"><div class="lab">RSI 14</div><div id="rsi" class="big">—</div></div>
+ <div class="card"><div class="lab">ATR 14</div><div id="atr" class="big">—</div></div>
+ <div class="card"><div class="lab">ESTRUCTURA</div><div id="structure" class="big" style="font-size:17px">—</div></div>
+ <div class="card"><div class="lab">ENTRADA REFERENCIA</div><div id="entry" class="big">—</div></div>
+ <div class="card"><div class="lab">OBJETIVO +100 PIPS*</div><div id="target" class="big">—</div></div>
+ <div class="card"><div class="lab">INVALIDACIÓN</div><div id="stop" class="big">—</div></div>
+ <div class="card"><div class="lab">ESPACIO / VOLATILIDAD</div><div id="space" class="big" style="font-size:17px">—</div></div>
+ <div class="card wide"><div class="lab">LECTURA AUTOMÁTICA</div><ul id="why"><li>Conecta la fuente de datos una sola vez.</li></ul></div>
+</div>
+<p class="status">* V1 usa 1 pip = 0.01 USD para XAU/USD; 100 pips = 1.00 USD. Esta convención podrá ajustarse al broker. Herramienta analítica, no garantiza recorridos ni resultados.</p>
+</div>
 <script>
-const PIP=0.01, EXT=100*PIP; // V1: convención editable para XAUUSD
-function n(id){return parseFloat(document.getElementById(id).value)}
-function analyze(){
- let p=n('price'),h=n('high'),l=n('low'),f=n('fast'),s=n('slow'),r=n('rsi');
- if([p,h,l,f,s,r].some(Number.isNaN)||l>=h){alert('Completa valores válidos. El mínimo debe ser menor al máximo.');return}
- let bull=0,bear=0,why=[];
- if(f>s){bull+=30;why.push('EMA rápida por encima de EMA lenta: sesgo alcista.')}else{bear+=30;why.push('EMA rápida por debajo de EMA lenta: sesgo bajista.')}
- if(p>f){bull+=20;why.push('Precio sobre EMA rápida.')}else{bear+=20;why.push('Precio bajo EMA rápida.')}
- if(r>=52&&r<=70){bull+=25;why.push('RSI con momentum alcista sin extremo fuerte.')}
- else if(r<=48&&r>=30){bear+=25;why.push('RSI con momentum bajista sin extremo fuerte.')}
- else why.push('RSI sin confirmación clara o en zona extrema.');
- let pos=(p-l)/(h-l);
- if(pos>.55){bull+=15;why.push('Precio en mitad superior del rango reciente.')}
- else if(pos<.45){bear+=15;why.push('Precio en mitad inferior del rango reciente.')}
- else why.push('Precio cerca del centro del rango.');
- let diff=bull-bear, sig='ESPERAR', cls='wait',score=Math.min(100,Math.max(bull,bear));
- if(diff>=35){sig='COMPRA';cls='buy'} else if(diff<=-35){sig='VENTA';cls='sell'}
- let target=sig==='COMPRA'?p+EXT:sig==='VENTA'?p-EXT:null;
- document.getElementById('signal').textContent=sig;document.getElementById('signal').className='signal '+cls;
- document.getElementById('target').textContent=target?target.toFixed(2):'—';
- document.getElementById('score').textContent=score+'%';document.getElementById('fill').style.width=score+'%';
- why.push(sig==='ESPERAR'?'No hay confluencia suficiente para una entrada V1.':'Existe confluencia V1; validar riesgo y contexto antes de operar.');
- document.getElementById('why').innerHTML=why.map(x=>'<li>'+x+'</li>').join('');
+const SYMBOL='XAU/USD', INTERVAL='5min', OUT=220, PIP=.01, EXT=100*PIP;
+let timer=null;
+function ema(a,n){let k=2/(n+1),e=a[0];for(let i=1;i<a.length;i++)e=a[i]*k+e*(1-k);return e}
+function rsi(a,n=14){let g=0,l=0;for(let i=a.length-n;i<a.length;i++){let d=a[i]-a[i-1];if(d>0)g+=d;else l-=d}if(!l)return 100;let rs=(g/n)/(l/n);return 100-100/(1+rs)}
+function atr(v,n=14){let x=[];for(let i=1;i<v.length;i++)x.push(Math.max(v[i].h-v[i].l,Math.abs(v[i].h-v[i-1].c),Math.abs(v[i].l-v[i-1].c)));return x.slice(-n).reduce((a,b)=>a+b,0)/n}
+function saveKey(){let k=document.getElementById('key').value.trim();if(!k)return alert('Pega tu API key.');localStorage.setItem('gold_td_key',k);load();if(timer)clearInterval(timer);timer=setInterval(load,60000)}
+async function load(){
+ let k=localStorage.getItem('gold_td_key'); if(!k)return;
+ try{
+  let u=`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(SYMBOL)}&interval=${INTERVAL}&outputsize=${OUT}&apikey=${encodeURIComponent(k)}`;
+  let d=await fetch(u).then(r=>r.json()); if(d.status==='error'||!d.values)throw new Error(d.message||'Sin datos');
+  let v=d.values.slice().reverse().map(x=>({t:x.datetime,o:+x.open,h:+x.high,l:+x.low,c:+x.close}));
+  analyze(v);
+ }catch(e){document.getElementById('signal').textContent='ERROR';document.getElementById('why').innerHTML=`<li>${e.message}</li>`}
 }
+function analyze(v){
+ let c=v.map(x=>x.c), p=c.at(-1), e20=ema(c.slice(-100),20),e50=ema(c.slice(-150),50),R=rsi(c),A=atr(v);
+ let recent=v.slice(-21,-1), hi=Math.max(...recent.map(x=>x.h)),lo=Math.min(...recent.map(x=>x.l));
+ let bull=0,bear=0,w=[];
+ if(e20>e50){bull+=25;w.push('Tendencia EMA 20/50 alcista.')}else{bear+=25;w.push('Tendencia EMA 20/50 bajista.')}
+ if(p>e20){bull+=15;w.push('Precio sobre EMA 20.')}else{bear+=15;w.push('Precio bajo EMA 20.')}
+ if(R>=52&&R<72){bull+=20;w.push('Momentum RSI favorece compras.')}else if(R<=48&&R>28){bear+=20;w.push('Momentum RSI favorece ventas.')}else w.push('RSI sin ventaja clara o en extremo.');
+ if(p>hi){bull+=25;w.push('Ruptura del máximo de las últimas 20 velas.')}else if(p<lo){bear+=25;w.push('Ruptura del mínimo de las últimas 20 velas.')}else w.push('Sin ruptura confirmada del rango de 20 velas.');
+ if(A>=EXT*.65){if(bull>bear)bull+=15;else if(bear>bull)bear+=15;w.push('ATR compatible con un recorrido relevante para el objetivo.')}else w.push('Volatilidad actual limitada frente al objetivo de 100 pips.');
+ let diff=bull-bear, sig='ESPERAR',cl='wait'; if(diff>=35){sig='COMPRA';cl='up'}else if(diff<=-35){sig='VENTA';cl='dn'}
+ let sc=Math.min(100,Math.max(bull,bear)), tgt=sig==='COMPRA'?p+EXT:sig==='VENTA'?p-EXT:null;
+ let stp=sig==='COMPRA'?Math.min(e20,lo):sig==='VENTA'?Math.max(e20,hi):null;
+ document.getElementById('price').textContent=p.toFixed(2);let s=document.getElementById('signal');s.textContent=sig;s.className='sig '+cl;
+ document.getElementById('score').textContent=sc+'%';document.getElementById('fill').style.width=sc+'%';
+ document.getElementById('time').textContent=v.at(-1).t;document.getElementById('emas').textContent=e20.toFixed(2)+' / '+e50.toFixed(2);
+ document.getElementById('rsi').textContent=R.toFixed(1);document.getElementById('atr').textContent=A.toFixed(2);
+ document.getElementById('structure').textContent=p>hi?'BREAK ↑':p<lo?'BREAK ↓':'RANGO';
+ document.getElementById('entry').textContent=sig==='ESPERAR'?'—':p.toFixed(2);document.getElementById('target').textContent=tgt?tgt.toFixed(2):'—';
+ document.getElementById('stop').textContent=stp?stp.toFixed(2):'—';document.getElementById('space').textContent=A>=EXT*.65?'APTO':'BAJO';
+ w.push(sig==='ESPERAR'?'El motor no detecta confluencia suficiente ahora.':'Se detectó confluencia; la señal requiere gestión de riesgo y no implica que el objetivo vaya a alcanzarse.');
+ document.getElementById('why').innerHTML=w.map(x=>'<li>'+x+'</li>').join('');
+}
+window.onload=()=>{let k=localStorage.getItem('gold_td_key');if(k){document.getElementById('key').placeholder='API key guardada en este navegador';load();timer=setInterval(load,60000)}}
 </script></body></html>
