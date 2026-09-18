@@ -1,28 +1,58 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MATCH Transition Matrix Lab</title><style>
-body{font-family:Arial;max-width:850px;margin:auto;background:#f4f5f8;color:#292b31}.c{background:#fff;margin:14px;padding:16px;border-radius:14px}h1{text-align:center;font-size:23px}.s{font-size:12px;color:#777;line-height:1.5}.state{text-align:center;padding:12px;background:#eef0ff;color:#5144c8;border-radius:10px;font-weight:bold}button{width:100%;padding:13px;margin-top:9px;border:0;border-radius:9px;background:#7056df;color:#fff;font-weight:bold}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px 4px;border-bottom:1px solid #eee;text-align:left}.diag{background:#111827;color:#eee;font:11px monospace}</style></head><body>
-<div class="c"><h1>MATCH · Transition Matrix Lab</h1><p class="s" style="text-align:center">Hipótesis nueva · matriz 10×10 de transiciones entre últimos dígitos</p></div>
-<div class="c"><p id="live">Connecting…</p><div id="state" class="state">WARMUP 0/200</div>
-<p class="s">Reglas congeladas. Cada snapshot usa los últimos 200 dígitos para construir una matriz 10×10: fila = dígito actual, columna = dígito siguiente. Se toman 6 snapshots separados por 5 s y una decisión cada 30 s. Se evalúa únicamente el primer tick posterior.</p>
-<button id="reset">NEW TRANSITION TEST</button><button id="csv">EXPORT CSV</button></div>
-<div class="c"><table><thead><tr><th>Regla</th><th>Descripción</th><th>W/N</th><th>Rate</th></tr></thead><tbody id="rows"></tbody></table></div>
-<div class="c"><b>Bloques de 20</b><table><thead><tr><th>Regla</th><th>B1</th><th>B2</th><th>B3</th><th>B4</th><th>B5</th></tr></thead><tbody id="blocks"></tbody></table></div>
-<div class="c"><b>Acuerdos</b><table><tbody id="agree"></tbody></table></div><div class="c diag" id="diag">Connection diagnostics</div>
-<script>(()=>{"use strict";const EP="wss://api.derivws.com/trading/v1/options/ws/public",W=200,T=100,$=x=>document.getElementById(x);let ws,h=[],last="",lastSnap=null,lastDecision=null,snaps=[],pending=null,events=[],done=false;
-const imax=a=>a.indexOf(Math.max(...a)),mk=(id,desc,fn)=>({id,desc,fn,n:0,w:0,b:Array.from({length:5},()=>({n:0,w:0}))});
-function mat(){let a=h.slice(-W),m=Array.from({length:10},()=>Array(10).fill(0));for(let i=0;i<a.length-1;i++)m[a[i]][a[i+1]]++;return m}
-function probs(row){let s=row.reduce((a,b)=>a+b,0);return row.map(x=>s?x/s:0)}
-let R=[
-mk("ROW","máxima transición desde el último dígito",a=>{let d=a[5].last;return imax(probs(a[5].m[d]))}),
-mk("ROW6","transición persistente en 6 matrices",a=>{let d=a[5].last,v=Array(10).fill(0);a.forEach(s=>probs(s.m[d]).forEach((x,i)=>v[i]+=x));return imax(v)}),
-mk("DELTA","transición con mayor subida S1→S6",a=>{let d=a[5].last,p1=probs(a[0].m[d]),p6=probs(a[5].m[d]);return imax(p6.map((x,i)=>x-p1[i]))}),
-mk("GLOBAL","destino más fuerte de toda la matriz",a=>{let m=a[5].m,v=Array(10).fill(0);m.forEach(row=>row.forEach((x,j)=>v[j]+=x));return imax(v)})
-],A={three:{n:0,w:0},all:{n:0,w:0}};
-function pct(w,n){return n?(100*w/n).toFixed(1)+"%":"—"}function render(){$("state").textContent=h.length<W?"WARMUP "+h.length+"/"+W:(done?"TRANSITION TEST COMPLETE":"FORWARD · "+R[0].n+"/"+T);$("rows").innerHTML=R.map(r=>`<tr><td>${r.id}</td><td>${r.desc}</td><td>${r.w}/${r.n}</td><td>${pct(r.w,r.n)}</td></tr>`).join("");$("blocks").innerHTML=R.map(r=>"<tr><td>"+r.id+"</td>"+r.b.map(b=>"<td>"+pct(b.w,b.n)+"<br>"+b.w+"/"+b.n+"</td>").join("")+"</tr>").join("");$("agree").innerHTML=`<tr><td>3+ reglas mismo dígito</td><td>${A.three.w}/${A.three.n}</td><td>${pct(A.three.w,A.three.n)}</td></tr><tr><td>4 reglas mismo dígito</td><td>${A.all.w}/${A.all.n}</td><td>${pct(A.all.w,A.all.n)}</td></tr>`}
-function tick(t){let q=Number(t.quote).toFixed(t.pip_size??2),d=+q.slice(-1),ep=+(t.epoch||0),key=ep+"|"+q;if(key===last)return;last=key;
-if(pending){let rec={decision_epoch:pending.ep,result_epoch:ep,context_digit:pending.ctx,actual:d},pred=pending.pred,bi=Math.min(4,Math.floor(R[0].n/20));R.forEach(r=>{let p=pred[r.id],z=d===p?1:0;r.n++;r.w+=z;r.b[bi].n++;r.b[bi].w+=z;rec["pred_"+r.id]=p;rec["win_"+r.id]=z});let c={};Object.values(pred).forEach(x=>c[x]=(c[x]||0)+1);let best=Math.max(...Object.values(c)),vote=+Object.keys(c).find(k=>c[k]===best);if(best>=3){A.three.n++;A.three.w+=d===vote?1:0;rec.agree3=1}else rec.agree3=0;if(best===4){A.all.n++;A.all.w+=d===vote?1:0;rec.agree4=1}else rec.agree4=0;events.push(rec);pending=null;if(R[0].n>=T)done=true}
-h.push(d);if(h.length>=W&&!done){if(lastSnap===null||ep-lastSnap>=5){snaps.push({ep,m:mat(),last:d});if(snaps.length>6)snaps.shift();lastSnap=ep}if(snaps.length===6&&(lastDecision===null||ep-lastDecision>=30)){let pred={};R.forEach(r=>pred[r.id]=r.fn(snaps));pending={ep,pred,ctx:d};lastDecision=ep}}render()}
-function connect(){try{ws&&ws.close()}catch(e){};$("live").textContent="Connecting…";ws=new WebSocket(EP);ws.onopen=()=>{$("live").textContent="● LIVE · 1HZ100V";$("diag").textContent="State: open · "+EP;ws.send(JSON.stringify({ticks:"1HZ100V",subscribe:1}))};ws.onmessage=e=>{let a;try{a=JSON.parse(e.data)}catch(_){return}if(a.tick)tick(a.tick)};ws.onclose=()=>{if(!done)setTimeout(connect,1500)}}
-function reset(){h=[];last="";lastSnap=lastDecision=null;snaps=[];pending=null;events=[];done=false;R.forEach(r=>{r.n=r.w=0;r.b=Array.from({length:5},()=>({n:0,w:0}))});A={three:{n:0,w:0},all:{n:0,w:0}};render()}
-$("reset").onclick=reset;$("csv").onclick=()=>{let o=["SUMMARY","rule,signals,wins,losses,rate"];R.forEach(r=>o.push([r.id,r.n,r.w,r.n-r.w,r.n?(r.w/r.n).toFixed(5):""].join(",")));o.push("","AGREEMENT","type,signals,wins,losses,rate",["AGREE3",A.three.n,A.three.w,A.three.n-A.three.w,A.three.n?(A.three.w/A.three.n).toFixed(5):""].join(","),["AGREE4",A.all.n,A.all.w,A.all.n-A.all.w,A.all.n?(A.all.w/A.all.n).toFixed(5):""].join(","),"","BLOCKS","rule,block,signals,wins,losses,rate");R.forEach(r=>r.b.forEach((b,i)=>o.push([r.id,i+1,b.n,b.w,b.n-b.w,b.n?(b.w/b.n).toFixed(5):""].join(","))));o.push("","DETAIL");let c=["decision_epoch","result_epoch","context_digit","actual","pred_ROW","win_ROW","pred_ROW6","win_ROW6","pred_DELTA","win_DELTA","pred_GLOBAL","win_GLOBAL","agree3","agree4"];o.push(c.join(","));events.forEach(e=>o.push(c.map(k=>e[k]??"").join(",")));let b=new Blob([o.join("\n")],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="match_transition_matrix_lab.csv";a.click()};render();connect()})();
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gold Analyzer V1</title>
+<style>
+:root{--bg:#0b0e13;--card:#131923;--line:#273244;--text:#edf2f7;--muted:#8fa0b5;--gold:#d6aa42;--green:#28c281;--red:#ef5b5b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,Arial;padding:18px}
+.wrap{max-width:920px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+h1{font-size:24px;margin:0}.tag{color:var(--gold);font-weight:700}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.wide{grid-column:1/-1}
+label{display:block;color:var(--muted);margin-bottom:7px}input{width:100%;padding:11px;border-radius:9px;border:1px solid var(--line);background:#0d121a;color:white;font-size:16px}
+button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--gold);color:#111;font-weight:800;cursor:pointer}
+.value{font-size:26px;font-weight:800}.muted{color:var(--muted)}.signal{font-size:34px;font-weight:900}.buy{color:var(--green)}.sell{color:var(--red)}.wait{color:var(--gold)}
+.bar{height:9px;background:#242c38;border-radius:8px;overflow:hidden;margin-top:10px}.fill{height:100%;background:var(--gold);width:0}
+ul{line-height:1.8;padding-left:20px}@media(max-width:650px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style></head>
+<body><div class="wrap">
+<div class="head"><div><h1>GOLD ANALYZER</h1><div class="muted">Proyecto independiente · XAUUSD</div></div><div class="tag">V1</div></div>
+<div class="grid">
+<div class="card"><label>Precio actual XAUUSD</label><input id="price" type="number" step="0.01" placeholder="Ej. 3650.00"></div>
+<div class="card"><label>Máximo reciente</label><input id="high" type="number" step="0.01" placeholder="Máximo"></div>
+<div class="card"><label>Mínimo reciente</label><input id="low" type="number" step="0.01" placeholder="Mínimo"></div>
+<div class="card"><label>EMA rápida</label><input id="fast" type="number" step="0.01" placeholder="EMA 20"></div>
+<div class="card"><label>EMA lenta</label><input id="slow" type="number" step="0.01" placeholder="EMA 50"></div>
+<div class="card"><label>RSI</label><input id="rsi" type="number" step="0.1" min="0" max="100" placeholder="0–100"></div>
+<div class="card wide"><button onclick="analyze()">ANALIZAR ORO</button></div>
+<div class="card"><label>Señal</label><div id="signal" class="signal wait">ESPERAR</div></div>
+<div class="card"><label>Objetivo de extensión</label><div id="target" class="value">—</div><div class="muted">100 pips configurables</div></div>
+<div class="card"><label>Confianza técnica</label><div id="score" class="value">0%</div><div class="bar"><div id="fill" class="fill"></div></div></div>
+<div class="card wide"><label>Lectura del motor V1</label><ul id="why"><li>Introduce datos para iniciar el análisis.</li></ul></div>
+</div></div>
+<script>
+const PIP=0.01, EXT=100*PIP; // V1: convención editable para XAUUSD
+function n(id){return parseFloat(document.getElementById(id).value)}
+function analyze(){
+ let p=n('price'),h=n('high'),l=n('low'),f=n('fast'),s=n('slow'),r=n('rsi');
+ if([p,h,l,f,s,r].some(Number.isNaN)||l>=h){alert('Completa valores válidos. El mínimo debe ser menor al máximo.');return}
+ let bull=0,bear=0,why=[];
+ if(f>s){bull+=30;why.push('EMA rápida por encima de EMA lenta: sesgo alcista.')}else{bear+=30;why.push('EMA rápida por debajo de EMA lenta: sesgo bajista.')}
+ if(p>f){bull+=20;why.push('Precio sobre EMA rápida.')}else{bear+=20;why.push('Precio bajo EMA rápida.')}
+ if(r>=52&&r<=70){bull+=25;why.push('RSI con momentum alcista sin extremo fuerte.')}
+ else if(r<=48&&r>=30){bear+=25;why.push('RSI con momentum bajista sin extremo fuerte.')}
+ else why.push('RSI sin confirmación clara o en zona extrema.');
+ let pos=(p-l)/(h-l);
+ if(pos>.55){bull+=15;why.push('Precio en mitad superior del rango reciente.')}
+ else if(pos<.45){bear+=15;why.push('Precio en mitad inferior del rango reciente.')}
+ else why.push('Precio cerca del centro del rango.');
+ let diff=bull-bear, sig='ESPERAR', cls='wait',score=Math.min(100,Math.max(bull,bear));
+ if(diff>=35){sig='COMPRA';cls='buy'} else if(diff<=-35){sig='VENTA';cls='sell'}
+ let target=sig==='COMPRA'?p+EXT:sig==='VENTA'?p-EXT:null;
+ document.getElementById('signal').textContent=sig;document.getElementById('signal').className='signal '+cls;
+ document.getElementById('target').textContent=target?target.toFixed(2):'—';
+ document.getElementById('score').textContent=score+'%';document.getElementById('fill').style.width=score+'%';
+ why.push(sig==='ESPERAR'?'No hay confluencia suficiente para una entrada V1.':'Existe confluencia V1; validar riesgo y contexto antes de operar.');
+ document.getElementById('why').innerHTML=why.map(x=>'<li>'+x+'</li>').join('');
+}
 </script></body></html>
