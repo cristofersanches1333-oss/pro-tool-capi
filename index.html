@@ -28,15 +28,15 @@ ul{line-height:1.65;padding-left:20px;margin-bottom:0}@media(max-width:700px){.g
  <div class="card"><div class="lab">ATR 14</div><div id="atr" class="big">—</div></div>
  <div class="card"><div class="lab">ESTRUCTURA</div><div id="structure" class="big" style="font-size:17px">—</div></div>
  <div class="card"><div class="lab">ENTRADA REFERENCIA</div><div id="entry" class="big">—</div></div>
- <div class="card"><div class="lab">OBJETIVO +100 PIPS*</div><div id="target" class="big">—</div></div>
+ <div class="card"><div class="lab">OBJETIVO +1000 PIPS*</div><div id="target" class="big">—</div></div>
  <div class="card"><div class="lab">INVALIDACIÓN</div><div id="stop" class="big">—</div></div>
  <div class="card"><div class="lab">ESPACIO / VOLATILIDAD</div><div id="space" class="big" style="font-size:17px">—</div></div>
  <div class="card wide"><div class="lab">LECTURA AUTOMÁTICA</div><ul id="why"><li>Conecta la fuente de datos una sola vez.</li></ul></div>
 </div>
-<p class="status">* V1 usa 1 pip = 0.01 USD para XAU/USD; 100 pips = 1.00 USD. Esta convención podrá ajustarse al broker. Herramienta analítica, no garantiza recorridos ni resultados.</p>
+<p class="status">* V1 usa 1 pip = 0.01 USD para XAU/USD; 1000 pips = 10.00 USD. Esta convención podrá ajustarse al broker. Herramienta analítica, no garantiza recorridos ni resultados.</p>
 </div>
 <script>
-const SYMBOL='XAU/USD', INTERVAL='5min', OUT=220, PIP=.01, EXT=100*PIP;
+const SYMBOL='XAU/USD', INTERVAL='5min', OUT=220, PIP=.01, EXT=1000*PIP;
 let timer=null;
 function ema(a,n){let k=2/(n+1),e=a[0];for(let i=1;i<a.length;i++)e=a[i]*k+e*(1-k);return e}
 function rsi(a,n=14){let g=0,l=0;for(let i=a.length-n;i<a.length;i++){let d=a[i]-a[i-1];if(d>0)g+=d;else l-=d}if(!l)return 100;let rs=(g/n)/(l/n);return 100-100/(1+rs)}
@@ -59,7 +59,7 @@ function analyze(v){
  if(p>e20){bull+=15;w.push('Precio sobre EMA 20.')}else{bear+=15;w.push('Precio bajo EMA 20.')}
  if(R>=52&&R<72){bull+=20;w.push('Momentum RSI favorece compras.')}else if(R<=48&&R>28){bear+=20;w.push('Momentum RSI favorece ventas.')}else w.push('RSI sin ventaja clara o en extremo.');
  if(p>hi){bull+=25;w.push('Ruptura del máximo de las últimas 20 velas.')}else if(p<lo){bear+=25;w.push('Ruptura del mínimo de las últimas 20 velas.')}else w.push('Sin ruptura confirmada del rango de 20 velas.');
- if(A>=EXT*.65){if(bull>bear)bull+=15;else if(bear>bull)bear+=15;w.push('ATR compatible con un recorrido relevante para el objetivo.')}else w.push('Volatilidad actual limitada frente al objetivo de 100 pips.');
+ if(A>=EXT*.20){if(bull>bear)bull+=15;else if(bear>bull)bear+=15;w.push('ATR compatible con un recorrido relevante para el objetivo.')}else w.push('Volatilidad actual limitada frente al objetivo de 1000 pips.');
  let diff=bull-bear, sig='ESPERAR',cl='wait'; if(diff>=35){sig='COMPRA';cl='up'}else if(diff<=-35){sig='VENTA';cl='dn'}
  let sc=Math.min(100,Math.max(bull,bear)), tgt=sig==='COMPRA'?p+EXT:sig==='VENTA'?p-EXT:null;
  let stp=sig==='COMPRA'?Math.min(e20,lo):sig==='VENTA'?Math.max(e20,hi):null;
@@ -69,7 +69,7 @@ function analyze(v){
  document.getElementById('rsi').textContent=R.toFixed(1);document.getElementById('atr').textContent=A.toFixed(2);
  document.getElementById('structure').textContent=p>hi?'BREAK ↑':p<lo?'BREAK ↓':'RANGO';
  document.getElementById('entry').textContent=sig==='ESPERAR'?'—':p.toFixed(2);document.getElementById('target').textContent=tgt?tgt.toFixed(2):'—';
- document.getElementById('stop').textContent=stp?stp.toFixed(2):'—';document.getElementById('space').textContent=A>=EXT*.65?'APTO':'BAJO';
+ document.getElementById('stop').textContent=stp?stp.toFixed(2):'—';document.getElementById('space').textContent=A>=EXT*.20?'APTO':'BAJO';
  w.push(sig==='ESPERAR'?'El motor no detecta confluencia suficiente ahora.':'Se detectó confluencia; la señal requiere gestión de riesgo y no implica que el objetivo vaya a alcanzarse.');
  document.getElementById('why').innerHTML=w.map(x=>'<li>'+x+'</li>').join('');
 }
